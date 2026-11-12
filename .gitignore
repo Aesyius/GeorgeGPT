@@ -1,0 +1,12 @@
+# Local environments, generated caches, index data, and runtime output.
+.venv/
+.venv-webui/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+chroma_db/
+runtime_logs/
+sample_questions/fak_answers.json
+.env
+.env.*
+!.env.example

@@ -1,0 +1,6 @@
+{
+  "chat_model": "qwen3.5:9b",
+  "embedding_model": "qwen3-embedding:0.6b",
+  "context_window_tokens": 16384,
+  "keep_alive_seconds": 1800
+}

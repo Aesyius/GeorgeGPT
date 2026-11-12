@@ -1,0 +1,26 @@
+{
+  "models_config": "config/models.json",
+  "startup_timeout_seconds": 240,
+  "poll_interval_seconds": 3,
+  "api_key_env_var": "RAG_API_KEY",
+  "ollama": {
+    "executable": "%LOCALAPPDATA%/Programs/Ollama/ollama.exe",
+    "host": "127.0.0.1",
+    "port": 11434
+  },
+  "rag_api": {
+    "python": ".venv/Scripts/python.exe",
+    "host": "127.0.0.1",
+    "port": 8001,
+    "model_id": "GeorgeGPT",
+    "openai_base_url": "http://127.0.0.1:8001/v1",
+    "open_webui_database": ".venv-webui/Lib/site-packages/open_webui/data/webui.db"
+  },
+  "open_webui": {
+    "python": ".venv-webui/Scripts/python.exe",
+    "host": "127.0.0.1",
+    "port": 8080,
+    "runtime_directory": "%LOCALAPPDATA%/Vectorizer/open-webui-runtime"
+  },
+  "logs_directory": "%LOCALAPPDATA%/Vectorizer/logs"
+}
