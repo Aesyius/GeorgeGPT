@@ -2,7 +2,7 @@
 
 ## How it works
 
-GeorgeGPT answers questions using indexed repository code and documentation. The application retrieves relevant passages using Chroma semantic search and SQLite FTS5/BM25 keyword search, then sends that evidence to an Ollama chat model. Open WebUI connects through the authenticated `GeorgeGPT` API; its own Knowledge/RAG is not used.
+GeorgeGPT is a Portuguese RAG enabled LLM that answers questions using indexed repository code and documentation. The application retrieves relevant passages using Chroma semantic search and SQLite FTS5/BM25 keyword search, then sends that evidence to an Ollama chat model. Open WebUI connects through the authenticated `GeorgeGPT` API; its own Knowledge/RAG is not used.
 
 The chatbot cannot execute commands, access additional files, or inspect live infrastructure. Its answers describe indexed evidence, not verified live system state.
 
