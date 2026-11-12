@@ -12,6 +12,10 @@ import urllib.request
 from .service_config import BootError, expand_path
 
 
+class ConnectionNotConfigured(BootError):
+    """First-time setup has not saved a WebUI connection yet."""
+
+
 class LoadingBar:
     """Compact waiting indicator; bounded log output when redirected."""
 
@@ -75,7 +79,7 @@ def read_api_key(config: dict, root: Path) -> str:
     env_key = os.getenv(env_name, "").strip()
     db_path = expand_path(config["rag_api"]["open_webui_database"], root)
     if not db_path.is_file():
-        raise BootError(f"Open WebUI database not found: {db_path}. Set {env_name} or configure an existing WebUI key.")
+        raise ConnectionNotConfigured(f"Open WebUI database not found: {db_path}. Configure the WebUI connection first.")
     try:
         connection = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True, timeout=10)
         try:
@@ -99,10 +103,10 @@ def read_api_key(config: dict, root: Path) -> str:
     if settings.get("openai.enable") is False:
         raise BootError("Open WebUI's OpenAI-compatible connection is disabled in its database.")
     if base_url not in base_urls:
-        raise BootError(f"Open WebUI does not have the configured RAG API URL: {base_url}")
+        raise ConnectionNotConfigured(f"Open WebUI does not have the configured RAG API URL: {base_url}")
     index = base_urls.index(base_url)
     if index >= len(keys) or not isinstance(keys[index], str) or not keys[index].strip():
-        raise BootError("Open WebUI has no API key saved for the RAG API connection.")
+        raise ConnectionNotConfigured("Open WebUI has no API key saved for the RAG API connection.")
     saved_key = keys[index].strip()
     if env_key and not hmac.compare_digest(env_key, saved_key):
         raise BootError(f"{env_name} does not match the key saved in Open WebUI. Update the connection and environment "

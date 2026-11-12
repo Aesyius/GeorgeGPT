@@ -11,6 +11,31 @@ The chatbot cannot execute commands, access additional files, or inspect live in
 Install **64-bit Python 3.12** and **Ollama**, ensure Ollama is running, and open PowerShell in this project folder. Replace `C:\Repos\FAK` with your repository:
 
 ```powershell
+.\setup.ps1 -RepositoryPath "C:\Repos\FAK"
+# Preview without installing, downloading, indexing, or starting anything:
+.\setup.ps1 -RepositoryPath "C:\Repos\FAK" -WhatIf
+```
+
+The setup script:
+- Creates or reuses `.venv` and `.venv-webui`, then installs dependencies.
+- Reads `config/models.json`, reuses installed models, and downloads only missing models.
+- Indexes your repository, verifies the index, and launches the API and WebUI.
+- Opens the browser for administrator registration and connection setup; existing saved API keys are reused.
+
+Stop an already-running stack before setup. In WebUI, create your administrator account and save the OpenAI-compatible connection at **`http://127.0.0.1:8001/v1`**. The API key is supplied to WebUI without being printed; if needed, type **C** at the setup prompt to copy it, then clear your clipboard after saving. Press **Enter** to verify the connection. Keep WebUI Knowledge disabled and select **GeorgeGPT**.
+
+Options: `-NoBrowser` skips opening the browser; `-ConfigPath` selects another bootup config. Setup leaves launched services running if interrupted; use the stop command below. If PowerShell blocks a trusted checkout:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -RepositoryPath "C:\Repos\FAK"
+```
+
+This bypass applies only to that PowerShell process; it does not change the machine policy.
+
+<details>
+<summary>Manual setup alternative</summary>
+
+```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 py -3.12 -m venv .venv-webui
@@ -35,7 +60,11 @@ In another terminal, start WebUI:
 
 Open **http://127.0.0.1:8080**, create the administrator account, and save an OpenAI-compatible connection with URL **`http://127.0.0.1:8001/v1`** and the same API key. Keep WebUI Knowledge disabled.
 
-Confirm executable, WebUI database, and port settings in `config/bootup.json`. Models, context size, and retention are configured in `config/models.json`. For subsequent launches:
+</details>
+
+### Subsequent launches
+
+Executable paths, WebUI database, and ports are configured in `config/bootup.json`; models, context size, and retention are in `config/models.json`.
 
 ```powershell
 .\.venv\Scripts\python.exe -m services.bootup start
