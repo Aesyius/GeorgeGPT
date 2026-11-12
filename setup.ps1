@@ -34,6 +34,15 @@ function Ensure-Environment([string]$Name, [string]$Launcher) {
 }
 
 try {
+    Write-Host @'
+============================================================
+          ENSURE THE SERVICES ARE INSTALLED
+============================================================
+  REQUIRED: 64-BIT PYTHON 3.12 (WITH THE PY LAUNCHER)
+  REQUIRED: OLLAMA INSTALLED AND RUNNING LOCALLY
+  Setup installs the project dependencies and Open WebUI.
+============================================================
+'@ -ForegroundColor Yellow
     if ([string]::IsNullOrWhiteSpace($ConfigPath)) { $ConfigPath = Join-Path $PSScriptRoot 'config\bootup.json' }
     $repository = (Resolve-Path -LiteralPath $RepositoryPath).Path
     if (-not (Test-Path -LiteralPath $repository -PathType Container)) { throw 'RepositoryPath must be a directory.' }
@@ -57,27 +66,35 @@ try {
     if ((Resolve-ProjectPath $config.rag_api.python) -ne $apiPython -or (Resolve-ProjectPath $config.open_webui.python) -ne $webPython) {
         throw 'Setup manages the project .venv and .venv-webui only; adjust configured Python paths or install custom environments manually.'
     }
+    # Real setup checks prerequisites before confirmation or any installation.
+    # Keep -WhatIf offline: do not invoke Python, Ollama, or service probes.
+    if (-not $WhatIfPreference) {
+        Write-Host 'Checking required prerequisites before setup...'
+        $launcher = (Get-Command 'py.exe' -ErrorAction Stop).Source
+        Invoke-Checked $launcher @('-3.12', '-c', 'import sys; assert sys.maxsize > 2**32')
+        # The model loader uses only the standard library, so validate before installs.
+        Invoke-Checked $launcher @('-3.12', '-c', 'import sys; from pathlib import Path; sys.path.insert(0, sys.argv[2]); from common.model_config import ModelSettings; ModelSettings.from_file(Path(sys.argv[1]))', $modelsFile, $PSScriptRoot)
+        $ollama = Resolve-ProjectPath $config.ollama.executable
+        if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) { throw 'Install Ollama and set its executable path in config/bootup.json first.' }
+        $ollamaUrl = "http://$($config.ollama.host):$($config.ollama.port)"
+        try { $tags = Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 5 }
+        catch { throw "Ollama is not reachable at $ollamaUrl. Start the Ollama application, then retry." }
+        $installedModels = @($tags.models | ForEach-Object { $_.name })
+        foreach ($port in @($config.rag_api.port, $config.open_webui.port)) {
+            if (@(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue).Count -gt 0) {
+                throw 'API/WebUI services are already running. Stop them with python -m services.bootup kill before setup.'
+            }
+        }
+        Write-Host 'Prerequisites confirmed: Python 3.12, Ollama installed/running, and API/WebUI ports available.' -ForegroundColor Green
+    } else {
+        Write-Host 'Preview only: Python/Ollama availability and service ports will be checked during real setup.'
+    }
+
     Write-Host "Repository: $repository"
     Write-Host "Models: $($models.chat_model), $($models.embedding_model)"
-    Write-Host 'Steps: check prerequisites; create/reuse environments; install dependencies; pull models; index and verify; launch API/WebUI; save connection.'
+    Write-Host 'Steps: create/reuse environments; install dependencies; pull missing models; index and verify; launch API/WebUI; save connection.'
     Write-Host 'This downloads dependencies/model weights and indexes eligible text. Review source filters before indexing sensitive repositories.'
     if (-not $PSCmdlet.ShouldProcess($repository, 'Initialize GeorgeGPT and bootstrap its local services')) { return }
-
-    $launcher = (Get-Command 'py.exe' -ErrorAction Stop).Source
-    Invoke-Checked $launcher @('-3.12', '-c', 'import sys; assert sys.maxsize > 2**32')
-    # The model loader uses only the standard library, so validate before installs.
-    Invoke-Checked $launcher @('-3.12', '-c', 'import sys; from pathlib import Path; sys.path.insert(0, sys.argv[2]); from common.model_config import ModelSettings; ModelSettings.from_file(Path(sys.argv[1]))', $modelsFile, $PSScriptRoot)
-    $ollama = Resolve-ProjectPath $config.ollama.executable
-    if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) { throw 'Install Ollama and set its executable path in config/bootup.json first.' }
-    $ollamaUrl = "http://$($config.ollama.host):$($config.ollama.port)"
-    try { $tags = Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 5 }
-    catch { throw "Ollama is not reachable at $ollamaUrl. Start the Ollama application, then retry." }
-    $installedModels = @($tags.models | ForEach-Object { $_.name })
-    foreach ($port in @($config.rag_api.port, $config.open_webui.port)) {
-        if (@(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue).Count -gt 0) {
-            throw 'API/WebUI services are already running. Stop them with python -m services.bootup kill before setup.'
-        }
-    }
 
     Push-Location $PSScriptRoot
     try {
