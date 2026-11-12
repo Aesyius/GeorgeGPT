@@ -1,4 +1,4 @@
-"""Validated model/runtime settings shared by service startup and the API."""
+"""Validated model/runtime settings shared by RAG, service startup, and chat."""
 
 from dataclasses import asdict, dataclass
 import json

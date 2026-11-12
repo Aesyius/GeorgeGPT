@@ -1,4 +1,4 @@
-"""Shared filesystem paths for the command-line tools."""
+"""Project-root filesystem paths shared across all application packages."""
 
 import os
 from pathlib import Path

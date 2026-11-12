@@ -1,1 +1,1 @@
-"""Repository indexing, hybrid retrieval, chat, and manual service startup."""
+"""Safe source loading, structural chunking, indexing, and hybrid retrieval."""

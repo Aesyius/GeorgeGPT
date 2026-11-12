@@ -13,12 +13,12 @@ import chromadb
 
 from .chunking import DEFAULT_EMBEDDING_BYTES, embedding_metadata
 from .embeddings import create_embeddings
-from .model_config import DEFAULT_EMBEDDING_MODEL
-from .paths import DEFAULT_DB_PATH, resolve_path
+from common.model_config import DEFAULT_EMBEDDING_MODEL
+from common.paths import DEFAULT_DB_PATH, resolve_path
 from .chunking import chunk_file
 from .keyword_index import bm25_path as _bm25_path, write_bm25 as _write_bm25
 from .repository_index import DEFAULT_REPOSITORY, index_repository, repository_chunk_id
-from .progress import ProgressBar
+from common.progress import ProgressBar
 from .vector_store import (collection_documents, synchronize_vectors,
                            collection_snapshot as _collection_snapshot, repository_ids as _repository_ids)
 

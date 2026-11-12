@@ -20,8 +20,8 @@ from starlette.concurrency import run_in_threadpool
 from .chat import (ChatError, MAX_QUESTION_CHARS, bounded_history, build_messages,
                    generate_answer, prepare_evidence, stream_answer)
 from .completion_queue import CompletionQueue, CompletionQueueFull
-from .paths import DEFAULT_DB_PATH, resolve_path
-from .model_config import (DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL,
+from common.paths import DEFAULT_DB_PATH, resolve_path
+from common.model_config import (DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL,
                            DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_KEEP_ALIVE_SECONDS, ModelSettings)
 
 MODEL_ID = "GeorgeGPT"
@@ -119,7 +119,7 @@ def create_app(config: ServerConfig | None = None, retriever=None) -> FastAPI:
     async def lifespan(app):
         app.state.config = config if config is not None else ServerConfig.from_env()
         if retriever is None:
-            from .retrieval import Retriever
+            from vectorizer.retrieval import Retriever
 
             cfg = app.state.config
             app.state.retriever = await run_in_threadpool(

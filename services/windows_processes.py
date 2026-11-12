@@ -1,4 +1,4 @@
-"""Windows-only process inspection, tree traversal, launch, and termination."""
+"""Windows service process inspection, tree traversal, launch, and termination."""
 
 import json
 import os

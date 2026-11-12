@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import re
 
-from .paths import resolve_path
+from common.paths import resolve_path
 
 TEXT_EXTENSIONS = {
     ".md", ".markdown", ".txt", ".rst", ".py", ".sh", ".bash", ".nix",

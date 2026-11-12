@@ -8,9 +8,9 @@ import os
 import sys
 
 from .chat import ChatError, answer_question
-from .model_config import DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL
-from .paths import DEFAULT_DB_PATH, resolve_path
-from .retrieval import Retriever
+from common.model_config import DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL
+from common.paths import DEFAULT_DB_PATH, resolve_path
+from vectorizer.retrieval import Retriever
 
 
 def main() -> None:

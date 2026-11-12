@@ -6,13 +6,15 @@ The API is an OpenAI-compatible facade for Open WebUI, but generation goes direc
 
 ## Setup (Windows PowerShell)
 
-Run commands from the project root. Python entry points now use `-m vectorizer.<command>`; the former root-level scripts have been removed.
+Run commands from the project root. RAG commands use `-m vectorizer.<command>`, chat commands use `-m Interface.<command>`, service management uses `-m services.bootup`, and evaluation uses `-m evaluation.<command>`. `Interface` is capitalized on every platform.
 
 ## Layout
 
-- `vectorizer/` — application modules and CLI entry points.
-- Indexing internals are partitioned into source filtering (`source_files`), structural representation (`chunking`), vector publication (`vector_store`), and atomic keyword storage (`keyword_index`).
-- Service management separates CLI/orchestration (`bootup`), resolved settings (`service_config`), Windows process operations (`windows_processes`), and readiness/credential checks (`service_runtime`). See [module responsibilities](docs/architecture.md#modules).
+- `vectorizer/` — RAG only: loading, filtering, structural chunks, embeddings, indexing, storage, retrieval, and integrity auditing.
+- `Interface/` — chat transport/system prompt (`chat`), OpenAI-compatible API (`server`), query CLI (`ask`), and completion admission (`completion_queue`).
+- `services/` — process lifecycle (`bootup`), resolved startup settings, Windows process operations, model warmup, and readiness/credential checks.
+- `common/` — shared model configuration, project-root paths, and progress reporting.
+- `evaluation/` — retrieval and answer evaluation commands. See [module responsibilities](docs/architecture.md#modules).
 - `config/bootup.json` — manual service startup configuration (paths are relative to the project root).
 - `docs/` — [architecture](docs/architecture.md) and [service startup](docs/bootup.md).
 - `tests/` and `tests/fixtures/` — tests and sample source documents.
@@ -57,11 +59,11 @@ Chunk identities include the chunking version, embedding-input version, size, ov
 
 ```powershell
 # Capture the existing retrieval baseline before reindexing.
-.\.venv\Scripts\python.exe -m vectorizer.evaluate_retrieval --collection repo_documents --output runtime_logs/retrieval-baseline.json
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --collection repo_documents --output runtime_logs/retrieval-baseline.json
 # Build new vectors separately, keeping the production collection intact.
 .\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Users\Cyber.DESKTOP-MAG5LP5.000\Desktop\Project\FAK" --collection repo_documents_context_v1
 .\.venv\Scripts\python.exe -m vectorizer.verify_index "C:\Users\Cyber.DESKTOP-MAG5LP5.000\Desktop\Project\FAK" --collection repo_documents_context_v1
-.\.venv\Scripts\python.exe -m vectorizer.evaluate_retrieval --collection repo_documents_context_v1 --output runtime_logs/retrieval-context-v1.json
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --collection repo_documents_context_v1 --output runtime_logs/retrieval-context-v1.json
 ```
 
 The retrieval evaluator makes no chat-model calls, refuses existing output files, and records passages for manual completeness review. Compare expected-path recall@8 and first-relevant-result MRR with the same questions, source revision, embedding model, and retrieval settings. These are file-relevance proxies, not measured answer accuracy. Evaluate representative questions before selecting the experimental collection with `RAG_COLLECTION`. Pass matching custom chunking/byte-cap options to the verifier.
@@ -79,7 +81,7 @@ This performs a paginated full scan of stored vectors and can take time for a la
 The CLI uses Ollama directly and answers from retrieved repository evidence:
 
 ```powershell
-.\.venv\Scripts\python.exe -m vectorizer.ask "Why would diagnose-vlr-online fail after a rebuild?"
+.\.venv\Scripts\python.exe -m Interface.ask "Why would diagnose-vlr-online fail after a rebuild?"
 ```
 
 It combines exact-term FTS5/BM25 search with semantic Chroma retrieval. The answer distinguishes repository behavior, historical documentation, and user-provided evidence; indexed snapshots do not establish live infrastructure state. Source paths and citation lists are not included in chat responses.
@@ -96,7 +98,7 @@ $env:RAG_API_KEY = "replace-with-a-long-random-secret"
 # $env:OLLAMA_CHAT_MODEL = "qwen2.5-coder:7b"
 # $env:OLLAMA_EMBEDDING_MODEL = "qwen3-embedding:0.6b"
 # $env:OLLAMA_BASE_URL = "http://localhost:11434"
-.\.venv\Scripts\python.exe -m uvicorn vectorizer.server:app --host 127.0.0.1 --port 8001
+.\.venv\Scripts\python.exe -m uvicorn Interface.server:app --host 127.0.0.1 --port 8001
 ```
 
 Configure an OpenAI-compatible connection in Open WebUI:
@@ -111,10 +113,10 @@ The API binds to loopback in this example, authenticates bearer tokens, and limi
 To manually launch and verify the stack, edit `config/bootup.json` if paths/models change, then run:
 
 ```powershell
-.\.venv\Scripts\pythonw.exe -m vectorizer.bootup
+.\.venv\Scripts\pythonw.exe -m services.bootup
 ```
 
-For the service CLI, use `python.exe -m vectorizer.bootup start` to force-restart all three stack services, `kill --dry-run` to preview targets, or `kill --service webui` / `kill --service api` / `kill --service ollama` to stop one verified service. `kill` with no service stops WebUI, the RAG API, and Ollama, including their child processes. Unrelated processes and bootup itself remain protected. See [service CLI commands](docs/bootup.md#cli-commands).
+For the service CLI, use `python.exe -m services.bootup start` to force-restart all three stack services, `kill --dry-run` to preview targets, or `kill --service webui` / `kill --service api` / `kill --service ollama` to stop one verified service. `kill` with no service stops WebUI, the RAG API, and Ollama, including their child processes. Unrelated processes and bootup itself remain protected. See [service CLI commands](docs/bootup.md#cli-commands).
 
 Select the API's underlying models and context window in **`config/models.json`** (`chat_model`, `embedding_model`, `context_window_tokens`; default context: 16384 tokens). `config/bootup.json` references it through `models_config`. Bootup validates this file and explicitly passes its settings to the child processes, overriding inherited model settings. Both chat response paths send `num_ctx` to Ollama. The API is always restarted to apply current code and settings; its authenticated `/v1/config` is checked after startup. Changing the embedding model requires a matching reindex. See [configuration and precedence](docs/bootup.md#model-and-context-configuration).
 
@@ -125,10 +127,24 @@ Use `pythonw.exe` to launch without opening a terminal window. The script force-
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m compileall -q vectorizer tests
+.\.venv\Scripts\python.exe -m compileall -q vectorizer Interface services common evaluation tests
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 The Ollama embedding integration test uses `qwen3-embedding:0.6b` by default (or `OLLAMA_EMBEDDING_MODEL`). To run the API server, install the full `requirements.txt` (including FastAPI and Uvicorn).
 
-Run the sample question evaluation with `python -m vectorizer.evaluate_questions`. See [service startup](docs/bootup.md) for the manual restart contract. The architecture document under `tests/fixtures/` is sample infrastructure content for chunking tests, not this chatbot's architecture.
+Run the sample question evaluation with `python -m evaluation.evaluate_questions`. See [service startup](docs/bootup.md) for the manual restart contract. The architecture document under `tests/fixtures/` is sample infrastructure content for chunking tests, not this chatbot's architecture.
+
+## Directory restructure migration
+
+The old non-RAG `vectorizer` module paths have been removed rather than retained as forwarding stubs. Update terminal commands, shortcuts, and integrations as follows:
+
+| Previous command/target | Current command/target |
+| --- | --- |
+| `vectorizer.bootup` | `services.bootup` |
+| `vectorizer.ask` | `Interface.ask` |
+| `vectorizer.server:app` | `Interface.server:app` |
+| `vectorizer.evaluate_questions` | `evaluation.evaluate_questions` |
+| `vectorizer.evaluate_retrieval` | `evaluation.evaluate_retrieval` |
+
+Indexing and verification commands stay under `vectorizer`. Existing databases, configuration, model settings, environments, logs, API URLs, and the `GeorgeGPT` model alias are unchanged; no reindex is needed. The new bootup recognizes verified old API process trees during the next operator-requested restart and launches the new API target. Moving files does not automatically restart running services.

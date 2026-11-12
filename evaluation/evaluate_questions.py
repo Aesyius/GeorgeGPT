@@ -10,10 +10,10 @@ import os
 from pathlib import Path
 import tempfile
 
-from .chat import answer_question
-from .model_config import DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL
-from .paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path
-from .retrieval import Retriever
+from Interface.chat import answer_question
+from common.model_config import DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL
+from common.paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path
+from vectorizer.retrieval import Retriever
 
 
 def _read_questions(path: Path) -> list[dict]:

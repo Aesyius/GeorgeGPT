@@ -2,8 +2,8 @@
 
 import time
 
-from .chat import SYSTEM_PROMPT
-from .model_config import ModelSettings
+from Interface.chat import SYSTEM_PROMPT
+from common.model_config import ModelSettings
 from .service_config import BootError
 from .service_runtime import request_json
 

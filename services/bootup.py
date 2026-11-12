@@ -17,9 +17,9 @@ import sqlite3
 import subprocess
 import sys
 
-from .model_config import ModelSettings
+from common.model_config import ModelSettings
 from .model_warmup import warm_models
-from .paths import PROJECT_ROOT
+from common.paths import PROJECT_ROOT
 from .service_config import BootError, StartupSettings, expand_path, service_url
 # Established helper imports remain available from this CLI module.
 from .service_runtime import LoadingBar, read_api_key, request_json, wait_until
@@ -29,6 +29,9 @@ from .windows_processes import (
 )
 
 WEBUI_LAUNCH_MARKER = "from open_webui import app; app()"
+API_APP = "Interface.server:app"
+# Recognize already-running instances from before the directory restructure.
+VERIFIED_API_APPS = {API_APP, "vectorizer.server:app"}
 PROCESS_IDENTITY_FIELDS = ("ExecutablePath", "CommandLine", "ParentProcessId", "CreationDate")
 
 
@@ -121,7 +124,7 @@ def verified_api_roots(config: dict, root: Path, processes: list[dict]) -> list[
         if not executable_matches(process, python):
             continue
         arguments = command_arguments(process.get("CommandLine") or "")
-        if arguments[1:4] == ["-m", "uvicorn", "vectorizer.server:app"]:
+        if len(arguments) >= 4 and arguments[1:3] == ["-m", "uvicorn"] and arguments[3] in VERIFIED_API_APPS:
             roots.add(pid)
     targets = set(roots)
     for pid in roots:
@@ -256,7 +259,7 @@ def start_rag_api(config: dict, settings: StartupSettings, api_key: str) -> None
     env.update(settings.models.environment(settings.models_path))
     env[config.get("api_key_env_var", "RAG_API_KEY")] = api_key
     env["OLLAMA_BASE_URL"] = ollama_url
-    pid = launch([str(python), "-m", "uvicorn", "vectorizer.server:app", "--host", api["host"],
+    pid = launch([str(python), "-m", "uvicorn", API_APP, "--host", api["host"],
                   "--port", str(api["port"])], cwd=settings.root, env=env, log_path=settings.logs / "rag-api.log")
     print(f"Started RAG API (PID {pid}).")
     headers = {"Authorization": f"Bearer {api_key}"}

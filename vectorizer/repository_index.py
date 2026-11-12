@@ -13,8 +13,8 @@ from .embeddings import create_embeddings
 from .chunking import (CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, DEFAULT_EMBEDDING_BYTES,
                        chunk_file, embedding_metadata)
 from .keyword_index import bm25_path as _bm25_path, write_bm25 as _write_bm25, update_bm25 as _update_bm25
-from .model_config import DEFAULT_EMBEDDING_MODEL
-from .paths import DEFAULT_DB_PATH, resolve_path
+from common.model_config import DEFAULT_EMBEDDING_MODEL
+from common.paths import DEFAULT_DB_PATH, resolve_path
 # Re-export the established discovery/storage helper imports for compatibility.
 from .source_files import (IGNORED_DIRS, SECRET_EXTENSIONS, SECRET_NAME, TEXT_EXTENSIONS,
                            discover_files, is_indexable)
@@ -72,7 +72,7 @@ def index_repository(
     if not files:
         raise ValueError(f"no eligible source files found under {root}")
     if progress is None:
-        from .progress import ProgressBar
+        from common.progress import ProgressBar
         progress = ProgressBar()
     revision = _revision(root)
     repo_key = _hash(str(root).casefold())[:20]

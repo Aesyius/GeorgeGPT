@@ -5,7 +5,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from .paths import resolve_path
+from common.paths import resolve_path
 
 
 def load_and_split_text(

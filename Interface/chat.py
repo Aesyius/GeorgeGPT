@@ -7,7 +7,7 @@ from typing import Iterator
 
 import requests
 
-from .model_config import (DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_KEEP_ALIVE_SECONDS,
+from common.model_config import (DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_KEEP_ALIVE_SECONDS,
                            validate_context_window, validate_keep_alive)
 
 MAX_QUESTION_CHARS = 8000

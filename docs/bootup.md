@@ -1,29 +1,29 @@
 # Windows service CLI for GeorgeGPT
 
-From the project root run `.\.venv\Scripts\pythonw.exe -m vectorizer.bootup` for no console window, or use `python.exe` instead for visible progress. Configuration lives in `config/bootup.json`; relative executable/data paths resolve from the project root, not the configuration directory. Windowless status and errors go to `bootup.log` in the configured logs directory.
+From the project root run `.\.venv\Scripts\pythonw.exe -m services.bootup` for no console window, or use `python.exe` instead for visible progress. Configuration lives in `config/bootup.json`; relative executable/data paths resolve from the project root, not the configuration directory. Windowless status and errors go to `bootup.log` in the configured logs directory.
 
 ## CLI commands
 
 ```powershell
 # Start and verify the stack (bootup is an alias; no command still means start).
-.\.venv\Scripts\python.exe -m vectorizer.bootup start
+.\.venv\Scripts\python.exe -m services.bootup start
 # Preview which process trees would be killed; changes nothing.
-.\.venv\Scripts\python.exe -m vectorizer.bootup kill --dry-run
+.\.venv\Scripts\python.exe -m services.bootup kill --dry-run
 # Force-kill verified WebUI, RAG API, and Ollama trees without restarting them.
-.\.venv\Scripts\python.exe -m vectorizer.bootup kill
+.\.venv\Scripts\python.exe -m services.bootup kill
 # Target one service (stop is an alias for kill).
-.\.venv\Scripts\python.exe -m vectorizer.bootup kill --service webui
-.\.venv\Scripts\python.exe -m vectorizer.bootup kill --service api
-.\.venv\Scripts\python.exe -m vectorizer.bootup stop --service ollama
+.\.venv\Scripts\python.exe -m services.bootup kill --service webui
+.\.venv\Scripts\python.exe -m services.bootup kill --service api
+.\.venv\Scripts\python.exe -m services.bootup stop --service ollama
 # Use a different configuration file.
-.\.venv\Scripts\python.exe -m vectorizer.bootup --config config/bootup.json start
+.\.venv\Scripts\python.exe -m services.bootup --config config/bootup.json start
 ```
 
 `kill`/`stop` default to `--service all`, which means **Open WebUI, the RAG API, and Ollama**, never arbitrary PIDs or all Python processes. These commands force-terminate their verified process trees (`taskkill /T /F`); active chat/generation requests are interrupted. They do not launch services, require an API key, read the WebUI database, or delete data files. Exit status is 0 on success (including already-stopped services), 1 on an operational failure, and 2 on invalid CLI arguments.
 
 All selected services are inspected before the first kill. An unrelated listener causes refusal, and a tree containing bootup itself or a listening service not selected for shutdown is protected. Process identities are refreshed before stopping each service; new processes or changed identities require operator review/retry. Roots already terminated by another selected parent tree are not killed twice. `--service` and `--dry-run` apply only to `kill`/`stop`.
 
-API ownership requires the configured repository Python executable and the exact command `python.exe -m uvicorn vectorizer.server:app ...`; matching a port or a command-line substring alone is insufficient. Worker/redirector descendants are included. Verified API launchers are stopped even when unhealthy or not listening. A manually launched API using an unrecognized executable/command must be stopped manually rather than bypassing ownership checks. Other repository commands such as indexing, tests, editors, and OpenCode are not service targets.
+API ownership requires the configured repository Python executable and the exact command `python.exe -m uvicorn Interface.server:app ...`; matching a port or a command-line substring alone is insufficient. For transition only, the new bootup also recognizes verified instances using the former `vectorizer.server:app` target. Worker/redirector descendants are included. Verified API launchers are stopped even when unhealthy or not listening. A manually launched API using an unrecognized executable/command must be stopped manually rather than bypassing ownership checks. Other repository commands such as indexing, tests, editors, and OpenCode are not service targets. Update old bootup shortcuts to `services.bootup`; old Python import/CLI modules are not kept inside the RAG package.
 
 ## Model and context configuration
 
@@ -81,7 +81,7 @@ Start Ollama, the repository RAG API, and Open WebUI in the right order after si
    - Warm both inference paths and verify their joint residency before launching the API/WebUI.
 4. **Start the RAG API**
    - Set `RAG_API_KEY` and `OLLAMA_BASE_URL` in the child process environment.
-   - Launch `.venv\Scripts\python.exe -m uvicorn vectorizer.server:app --host 127.0.0.1 --port 8001`.
+   - Launch `.venv\Scripts\python.exe -m uvicorn Interface.server:app --host 127.0.0.1 --port 8001`.
    - Wait for an authenticated `/v1/models` request to return `GeorgeGPT`, and check `/v1/config` matches the selected settings.
 5. **Start Open WebUI**
    - Launch the installed Open WebUI Python CLI on `127.0.0.1:8080` with the same API base URL and key.

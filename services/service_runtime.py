@@ -1,4 +1,4 @@
-"""Startup readiness checks and read-only WebUI credential resolution."""
+"""Service readiness checks and read-only WebUI credential resolution."""
 
 import hmac
 import json

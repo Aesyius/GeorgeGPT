@@ -6,9 +6,9 @@ import argparse
 import os
 
 from .evaluate_questions import _read_questions, _save_atomic
-from .model_config import DEFAULT_EMBEDDING_MODEL
-from .paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path
-from .retrieval import Retriever
+from common.model_config import DEFAULT_EMBEDDING_MODEL
+from common.paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path
+from vectorizer.retrieval import Retriever
 
 
 def evaluate(questions: list[dict], retriever) -> dict:

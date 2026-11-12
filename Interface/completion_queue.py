@@ -1,4 +1,4 @@
-"""Bounded, cancellation-safe admission to one local model generation slot."""
+"""Bounded, cancellation-safe admission for the chat interface's generation slot."""
 
 import asyncio
 import threading

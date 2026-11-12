@@ -1,4 +1,4 @@
-"""Tiny dependency-free CLI progress bar for long indexing stages."""
+"""Dependency-free CLI progress reporting for indexing and evaluation stages."""
 
 from __future__ import annotations
 

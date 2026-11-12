@@ -5,7 +5,7 @@ import sys
 import time
 
 from langchain_ollama import OllamaEmbeddings
-from .model_config import DEFAULT_EMBEDDING_MODEL, DEFAULT_KEEP_ALIVE_SECONDS, validate_keep_alive
+from common.model_config import DEFAULT_EMBEDDING_MODEL, DEFAULT_KEEP_ALIVE_SECONDS, validate_keep_alive
 
 
 def create_embeddings(

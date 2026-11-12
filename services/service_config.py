@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 
-from .model_config import ModelSettings
+from common.model_config import ModelSettings
 
 
 class BootError(RuntimeError):

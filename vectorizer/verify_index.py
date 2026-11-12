@@ -15,9 +15,9 @@ from .chunking import CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, DEFAULT_EMBEDDI
 from .keyword_index import bm25_path as _bm25_path
 from .source_files import discover_files
 from .vector_store import collection_snapshot as _collection_snapshot
-from .model_config import DEFAULT_EMBEDDING_MODEL
-from .paths import DEFAULT_DB_PATH, resolve_path
-from .progress import ProgressBar
+from common.model_config import DEFAULT_EMBEDDING_MODEL
+from common.paths import DEFAULT_DB_PATH, resolve_path
+from common.progress import ProgressBar
 from .repository_index import (
     DEFAULT_REPOSITORY,
     _hash,
