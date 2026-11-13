@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from common.model_config import ModelSettings
+from common.paths import configured_repository
 
 
 class BootError(RuntimeError):
@@ -28,6 +29,7 @@ class StartupSettings:
     logs: Path
     timeout: int
     interval: int
+    repository_path: Path
 
     @classmethod
     def from_config(cls, config: dict, root: Path) -> "StartupSettings":
@@ -36,5 +38,6 @@ class StartupSettings:
         if timeout < 1 or interval < 1:
             raise ValueError("startup_timeout_seconds and poll_interval_seconds must be positive")
         models_path = expand_path(config.get("models_config", "config/models.json"), root)
-        return cls(root, models_path, ModelSettings.from_file(models_path),
-                   expand_path(config["logs_directory"], root), timeout, interval)
+        return cls(root=root, models_path=models_path, models=ModelSettings.from_file(models_path),
+                   logs=expand_path(config["logs_directory"], root), timeout=timeout, interval=interval,
+                   repository_path=configured_repository(config, root))

@@ -9,9 +9,10 @@ import sqlite3
 import chromadb
 
 from .embeddings import create_embeddings
-from common.model_config import DEFAULT_EMBEDDING_MODEL
+from common.model_config import resolve_embedding_model
 from common.paths import DEFAULT_DB_PATH, resolve_path
 from .keyword_index import bm25_path as _bm25_path
+from .index_catalog import matching_index
 
 
 class Retriever:
@@ -21,7 +22,7 @@ class Retriever:
         self,
         db_path: str | Path = DEFAULT_DB_PATH,
         collection_name: str = "repo_documents",
-        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+        embedding_model: str | None = None,
         ollama_url: str | None = None,
         top_k: int = 8,
         context_budget: int = 18000,
@@ -29,6 +30,8 @@ class Retriever:
     ) -> None:
         if top_k < 1 or context_budget < 1000:
             raise ValueError("top_k must be positive and context_budget at least 1000")
+        embedding_model = resolve_embedding_model(embedding_model)
+        collection_name = matching_index(db_path, collection_name, embedding_model)
         self.db_path = resolve_path(db_path)
         self.collection_name = collection_name
         self.top_k = top_k

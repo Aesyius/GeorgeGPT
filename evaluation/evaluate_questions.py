@@ -11,8 +11,8 @@ from pathlib import Path
 import tempfile
 
 from Interface.chat import answer_question
-from common.model_config import DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL
-from common.paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path
+from common.model_config import resolve_model_names
+from common.paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path, configured_repository
 from vectorizer.retrieval import Retriever
 
 
@@ -57,8 +57,8 @@ def main() -> None:
     parser.add_argument("--output", type=resolve_path, default=root / "sample_questions" / "fak_answers.json")
     parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))))
     parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))
-    parser.add_argument("--embedding-model", default=os.getenv("OLLAMA_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL))
-    parser.add_argument("--chat-model", default=os.getenv("OLLAMA_CHAT_MODEL", DEFAULT_CHAT_MODEL))
+    parser.add_argument("--embedding-model", default=None)
+    parser.add_argument("--chat-model", default=None)
     parser.add_argument("--ollama-url", default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
     parser.add_argument("--top-k", type=int, default=8)
     args = parser.parse_args()
@@ -66,6 +66,7 @@ def main() -> None:
         parser.error("--top-k must be positive")
 
     try:
+        args.chat_model, args.embedding_model = resolve_model_names(args.chat_model, args.embedding_model)
         questions = _read_questions(args.questions)
         existing = {}
         if args.output.exists():
@@ -74,6 +75,9 @@ def main() -> None:
             if ((previous_questions is not None and previous_questions != str(args.questions))
                     or previous.get("collection") != args.collection):
                 parser.error(f"existing answer file belongs to another evaluation/index: {args.output}")
+            if (previous.get("embedding_model") != args.embedding_model
+                    or previous.get("chat_model") != args.chat_model):
+                parser.error(f"existing answer file uses different models; choose a new --output: {args.output}")
             existing = {item["id"]: item for item in previous.get("answers", [])
                         if item.get("status") == "answered"}
     except (OSError, ValueError, json.JSONDecodeError) as error:
@@ -81,7 +85,7 @@ def main() -> None:
 
     base = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "repository": r"C:\Users\Cyber.DESKTOP-MAG5LP5.000\Desktop\Project\FAK",
+        "repository": str(configured_repository()),
         "questions_file": str(args.questions),
         "collection": args.collection,
         "embedding_model": args.embedding_model,

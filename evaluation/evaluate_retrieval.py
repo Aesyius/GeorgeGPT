@@ -6,7 +6,7 @@ import argparse
 import os
 
 from .evaluate_questions import _read_questions, _save_atomic
-from common.model_config import DEFAULT_EMBEDDING_MODEL
+from common.model_config import resolve_embedding_model
 from common.paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path
 from vectorizer.retrieval import Retriever
 
@@ -41,9 +41,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--questions", type=resolve_path, default=PROJECT_ROOT / "sample_questions/fak_questions.jsonl")
     parser.add_argument("--output", type=resolve_path, required=True, help="new JSON output file; never reuses old results")
-    parser.add_argument("--db-path", type=resolve_path, default=DEFAULT_DB_PATH)
-    parser.add_argument("--collection", default="repo_documents")
-    parser.add_argument("--embedding-model", default=os.getenv("OLLAMA_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL))
+    parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))))
+    parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))
+    parser.add_argument("--embedding-model", default=None)
     parser.add_argument("--ollama-url", default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
     parser.add_argument("--top-k", type=int, default=8)
     args = parser.parse_args()
@@ -52,6 +52,7 @@ def main() -> None:
     if args.output.exists():
         parser.error("output already exists; choose a new file for an independent experiment")
     try:
+        args.embedding_model = resolve_embedding_model(args.embedding_model)
         questions = _read_questions(args.questions)
         retriever = Retriever(db_path=args.db_path, collection_name=args.collection,
                               embedding_model=args.embedding_model, ollama_url=args.ollama_url, top_k=args.top_k)

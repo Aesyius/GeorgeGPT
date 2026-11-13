@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from contextlib import closing
 from pathlib import Path
 import subprocess
@@ -13,15 +14,16 @@ from .embeddings import create_embeddings
 from .chunking import (CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, DEFAULT_EMBEDDING_BYTES,
                        chunk_file, embedding_metadata)
 from .keyword_index import bm25_path as _bm25_path, write_bm25 as _write_bm25, update_bm25 as _update_bm25
-from common.model_config import DEFAULT_EMBEDDING_MODEL
-from common.paths import DEFAULT_DB_PATH, resolve_path
+from .index_catalog import catalog_publication, manifest_mapping
+from common.model_config import resolve_embedding_model
+from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
 # Re-export the established discovery/storage helper imports for compatibility.
 from .source_files import (IGNORED_DIRS, SECRET_EXTENSIONS, SECRET_NAME, TEXT_EXTENSIONS,
                            discover_files, is_indexable)
 from .vector_store import (collection_snapshot as _collection_snapshot,
-                           repository_ids as _repository_ids, synchronize_vectors)
+                           repository_ids as _repository_ids, synchronize_vectors, update_collection_metadata,
+                           collection_embedding_model, source_generation)
 
-DEFAULT_REPOSITORY = Path(r"C:\Users\Cyber.DESKTOP-MAG5LP5.000\Desktop\Project\FAK")
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -50,11 +52,11 @@ def _revision(root: Path) -> str:
 
 
 def index_repository(
-    repository: str | Path = DEFAULT_REPOSITORY,
+    repository: str | Path | None = None,
     *,
     db_path: str | Path = DEFAULT_DB_PATH,
     collection_name: str = "repo_documents",
-    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+    embedding_model: str | None = None,
     ollama_url: str | None = None,
     chunk_size: int = 1400,
     overlap: int = 180,
@@ -63,7 +65,9 @@ def index_repository(
     progress=None,
 ) -> dict:
     """Index a repository; publish new snapshot IDs before removing its old snapshot."""
-    root, db_dir = resolve_path(repository), resolve_path(db_path)
+    embedding_model = resolve_embedding_model(embedding_model)
+    root = configured_repository() if repository is None else resolve_path(repository)
+    db_dir = resolve_path(db_path)
     if not root.is_dir():
         raise ValueError(f"repository is not a directory: {root}")
     if batch_size < 1:
@@ -77,6 +81,7 @@ def index_repository(
     revision = _revision(root)
     repo_key = _hash(str(root).casefold())[:20]
     prepared: list[dict] = []
+    source_hashes = []
     progress.start("Scanning/chunking files", len(files))
     for file in files:
         relative = file.relative_to(root).as_posix()
@@ -86,6 +91,7 @@ def index_repository(
             progress.advance()
             continue
         content_hash = _hash(text)
+        source_hashes.append((relative, content_hash))
         for idx, chunk in enumerate(chunk_file(file, relative, chunk_size=chunk_size, overlap=overlap, text=text,
                                              max_embedding_bytes=max_embedding_bytes)):
             metadata = {
@@ -103,6 +109,11 @@ def index_repository(
     keyword_path = _bm25_path(db_dir, collection_name)
     with closing(chromadb.PersistentClient(path=str(db_dir))) as client:
         collection = client.get_or_create_collection(name=collection_name, metadata={"hnsw:space": "cosine"})
+        previous_model = collection_embedding_model(collection)
+        if previous_model is not None and previous_model != embedding_model:
+            raise ValueError(f"Collection {collection_name!r} uses {previous_model}, not {embedding_model}. "
+                             "Select a matching model-specific collection; existing vectors were not modified.")
+        update_collection_metadata(collection, {"index_ready": False, "managed_ready": False})
         embedder = create_embeddings(embedding_model, ollama_url)
         old_ids, old_metadata = _repository_ids(collection, repo_key)
         result = synchronize_vectors(collection, prepared, old_ids, old_metadata, embedder,
@@ -111,6 +122,21 @@ def index_repository(
         _update_bm25(keyword_path, str(root), prepared)
         progress.advance()
         progress.finish()
+        # Small collection-level manifest: startup must not scan chunk metadata
+        # to discover which repositories need embedding with a different model.
+        metadata = dict(collection.metadata or {})
+        sources = manifest_mapping(metadata, "index_sources")
+        sources[str(root)] = {"chunk_size": chunk_size, "overlap": overlap,
+                              "max_embedding_bytes": max_embedding_bytes}
+        versions = manifest_mapping(metadata, "source_versions")
+        versions[str(root)] = _hash(json.dumps([CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, source_hashes]))
+        generation = source_generation(sources, versions)
+        publication = {"embedding_model": embedding_model, "index_ready": True,
+                       "index_sources": json.dumps(sources, sort_keys=True), "index_generation": generation,
+                       "source_versions": json.dumps(versions, sort_keys=True)}
+        if "catalog_sources" in metadata:
+            publication.update(catalog_publication(metadata, sources, versions))
+        update_collection_metadata(collection, publication)
     return {"repository": str(root), "revision": revision, "files": len(files),
             "chunks": len(prepared), **result.to_dict(), "collection": collection_name,
             "keyword_index": str(keyword_path)}

@@ -96,6 +96,10 @@ try {
     Write-Host 'This downloads dependencies/model weights and indexes eligible text. Review source filters before indexing sensitive repositories.'
     if (-not $PSCmdlet.ShouldProcess($repository, 'Initialize GeorgeGPT and bootstrap its local services')) { return }
 
+    # Persist the chosen source so future bootups use the same repository.
+    $config | Add-Member -MemberType NoteProperty -Name repository_path -Value $repository -Force
+    [IO.File]::WriteAllText($configFile, ($config | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
+
     Push-Location $PSScriptRoot
     try {
         Write-Host 'Preparing Python environments...'

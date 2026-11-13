@@ -1,14 +1,12 @@
 """Validated model/runtime settings shared by RAG, service startup, and chat."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import json
 import os
 from pathlib import Path
 
 from .paths import PROJECT_ROOT, resolve_path
 
-DEFAULT_EMBEDDING_MODEL = "qwen3-embedding:0.6b"
-DEFAULT_CHAT_MODEL = "qwen2.5-coder:7b"
 DEFAULT_CONTEXT_WINDOW_TOKENS = 16384
 DEFAULT_KEEP_ALIVE_SECONDS = 1800
 DEFAULT_MODELS_CONFIG = PROJECT_ROOT / "config" / "models.json"
@@ -24,10 +22,17 @@ def validate_keep_alive(value: int) -> None:
         raise ValueError("keep_alive_seconds must be a positive integer")
 
 
+def _environment_integer(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer") from error
+
+
 @dataclass(frozen=True)
 class ModelSettings:
-    chat_model: str = DEFAULT_CHAT_MODEL
-    embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    chat_model: str = field(default_factory=lambda: ModelSettings.from_env().chat_model)
+    embedding_model: str = field(default_factory=lambda: ModelSettings.from_env().embedding_model)
     context_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS
     keep_alive_seconds: int = DEFAULT_KEEP_ALIVE_SECONDS
 
@@ -68,17 +73,25 @@ class ModelSettings:
 
     @classmethod
     def from_env(cls) -> "ModelSettings":
-        """Standalone API: environment overrides the selected JSON configuration."""
+        """Resolve runtime defaults; environment overrides the selected JSON configuration."""
         path = resolve_path(os.getenv("RAG_MODEL_CONFIG", str(DEFAULT_MODELS_CONFIG)))
         settings = cls.from_file(path)
-        raw_context = os.getenv("OLLAMA_CONTEXT_WINDOW_TOKENS")
-        try:
-            context = int(raw_context) if raw_context is not None else settings.context_window_tokens
-        except ValueError as error:
-            raise ValueError("OLLAMA_CONTEXT_WINDOW_TOKENS must be an integer") from error
-        try:
-            keep_alive = int(os.getenv("OLLAMA_KEEP_ALIVE_SECONDS", str(settings.keep_alive_seconds)))
-        except ValueError as error:
-            raise ValueError("OLLAMA_KEEP_ALIVE_SECONDS must be an integer") from error
+        context = _environment_integer("OLLAMA_CONTEXT_WINDOW_TOKENS", settings.context_window_tokens)
+        keep_alive = _environment_integer("OLLAMA_KEEP_ALIVE_SECONDS", settings.keep_alive_seconds)
         return cls(os.getenv("OLLAMA_CHAT_MODEL", settings.chat_model),
                    os.getenv("OLLAMA_EMBEDDING_MODEL", settings.embedding_model), context, keep_alive)
+
+
+def resolve_embedding_model(model: str | None = None) -> str:
+    """Explicit callers win; omitted models always follow the runtime configuration."""
+    return ModelSettings.from_env().embedding_model if model is None else model
+
+
+def resolve_model_names(chat_model: str | None = None,
+                        embedding_model: str | None = None) -> tuple[str, str]:
+    """Resolve a CLI model pair once; explicit pairs need no config file."""
+    if chat_model is not None and embedding_model is not None:
+        return chat_model, embedding_model
+    settings = ModelSettings.from_env()
+    return (chat_model if chat_model is not None else settings.chat_model,
+            embedding_model if embedding_model is not None else settings.embedding_model)

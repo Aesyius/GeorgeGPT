@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 import hmac
 import json
 import os
@@ -20,9 +20,8 @@ from starlette.concurrency import run_in_threadpool
 from .chat import (ChatError, MAX_QUESTION_CHARS, bounded_history, build_messages,
                    generate_answer, prepare_evidence, stream_answer)
 from .completion_queue import CompletionQueue, CompletionQueueFull
-from common.paths import DEFAULT_DB_PATH, resolve_path
-from common.model_config import (DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL,
-                           DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_KEEP_ALIVE_SECONDS, ModelSettings)
+from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
+from common.model_config import (DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_KEEP_ALIVE_SECONDS, ModelSettings)
 
 MODEL_ID = "GeorgeGPT"
 MAX_BODY_BYTES = 65536
@@ -43,13 +42,14 @@ FORBIDDEN_MESSAGE_FIELDS = {"tools", "tool_choice", "functions", "function_call"
 @dataclass(frozen=True)
 class ServerConfig:
     api_key: str
-    chat_model: str = DEFAULT_CHAT_MODEL
+    chat_model: str = field(default_factory=lambda: ModelSettings.from_env().chat_model)
     db_path: Path = DEFAULT_DB_PATH
     collection_name: str = "repo_documents"
-    embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    embedding_model: str = field(default_factory=lambda: ModelSettings.from_env().embedding_model)
     ollama_url: str = "http://localhost:11434"
     context_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS
     keep_alive_seconds: int = DEFAULT_KEEP_ALIVE_SECONDS
+    repository_path: Path | None = None
 
     def __post_init__(self):
         if not self.api_key or not self.api_key.strip():
@@ -71,6 +71,7 @@ class ServerConfig:
             ollama_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
             context_window_tokens=models.context_window_tokens,
             keep_alive_seconds=models.keep_alive_seconds,
+            repository_path=configured_repository(),
         )
 
 
@@ -120,8 +121,14 @@ def create_app(config: ServerConfig | None = None, retriever=None) -> FastAPI:
         app.state.config = config if config is not None else ServerConfig.from_env()
         if retriever is None:
             from vectorizer.retrieval import Retriever
+            from vectorizer.managed_index import prepare_index
 
             cfg = app.state.config
+            collection = await run_in_threadpool(
+                prepare_index, cfg.db_path, cfg.collection_name, cfg.embedding_model,
+                cfg.ollama_url, cfg.repository_path,
+            )
+            cfg = app.state.config = replace(cfg, collection_name=collection)
             app.state.retriever = await run_in_threadpool(
                 Retriever, db_path=cfg.db_path, collection_name=cfg.collection_name,
                 embedding_model=cfg.embedding_model, ollama_url=cfg.ollama_url,

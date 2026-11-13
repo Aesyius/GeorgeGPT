@@ -1,11 +1,37 @@
 """Paginated Chroma access and shared incremental vector publication."""
 
 from dataclasses import dataclass
+import hashlib
+import json
 
 from .chunking import CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, embedding_text
 from .embeddings import embed_documents_with_retry
 
 WRITE_BATCH_SIZE = 500
+
+
+def source_generation(sources: dict, versions: dict) -> str:
+    """Model-independent source identity; changing only models must not invalidate indexes."""
+    payload = json.dumps({"sources": sources, "versions": versions}, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def update_collection_metadata(collection, values: dict) -> None:
+    """Merge bookkeeping without resubmitting immutable legacy HNSW settings."""
+    metadata = {key: value for key, value in (collection.metadata or {}).items()
+                if not key.startswith("hnsw:")}
+    collection.modify(metadata={**metadata, **values})
+
+
+def collection_embedding_model(collection) -> str | None:
+    """Read ownership, with one bounded legacy sample; never scan all chunks."""
+    model = (collection.metadata or {}).get("embedding_model")
+    if model:
+        return model
+    if not collection.count():
+        return None
+    sample = collection.get(limit=1, include=["metadatas"])
+    return next((item.get("embedding_model") for item in sample.get("metadatas", []) if item), None)
 
 
 def batches(items: list, size: int):

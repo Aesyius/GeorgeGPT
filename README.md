@@ -20,6 +20,7 @@ The setup script:
 - Creates or reuses `.venv` and `.venv-webui`, then installs dependencies.
 - Reads `config/models.json`, reuses installed models, and downloads only missing models.
 - Indexes your repository, verifies the index, and launches the API and WebUI.
+- Saves the selected repository as `repository_path` in `config/bootup.json` for future launches.
 - Opens the browser for administrator registration and connection setup; existing saved API keys are reused.
 
 Stop an already-running stack before setup. In WebUI, create your administrator account and save the OpenAI-compatible connection at **`http://127.0.0.1:8001/v1`**. The API key is supplied to WebUI without being printed; if needed, type **C** at the setup prompt to copy it, then clear your clipboard after saving. Press **Enter** to verify the connection. Keep WebUI Knowledge disabled and select **GeorgeGPT**.
@@ -40,8 +41,9 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 py -3.12 -m venv .venv-webui
 .\.venv-webui\Scripts\python.exe -m pip install open-webui
-ollama pull qwen3.5:9b
-ollama pull qwen3-embedding:0.6b
+$models = Get-Content .\config\models.json -Raw | ConvertFrom-Json
+ollama pull $models.chat_model
+ollama pull $models.embedding_model
 .\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Repos\FAK"
 ```
 
@@ -64,7 +66,19 @@ Open **http://127.0.0.1:8080**, create the administrator account, and save an Op
 
 ### Subsequent launches
 
-Executable paths, WebUI database, and ports are configured in `config/bootup.json`; models, context size, and retention are in `config/models.json`.
+The repository (`repository_path`), executable paths, WebUI database, and ports are configured in `config/bootup.json`; models, context size, and retention are in `config/models.json`.
+
+`repository_path` can be absolute or relative to this project root. Vectorize and
+verification use it when their positional repository argument is omitted:
+
+```powershell
+.\.venv\Scripts\python.exe -m vectorizer.vectorize
+.\.venv\Scripts\python.exe -m vectorizer.verify_index
+```
+
+Explicit CLI paths and `RAG_REPOSITORY_PATH` override the configured default.
+For standalone commands, `RAG_BOOTUP_CONFIG` selects an alternate bootup JSON file;
+`services.bootup --config` passes its selected repository to the API and preparation process.
 
 ```powershell
 .\.venv\Scripts\python.exe -m services.bootup start
@@ -74,6 +88,49 @@ Executable paths, WebUI database, and ports are configured in `config/bootup.jso
 
 Bootup reads the saved WebUI connection key, restarts verified service trees, warms both models, and checks readiness. Active chats are interrupted by a restart. Select **GeorgeGPT** in WebUI. Logs default to `%LOCALAPPDATA%\Vectorizer\logs`.
 
+### Change the embedding model
+
+Change `embedding_model` in `config/models.json`, ensure that exact Ollama tag is installed, and restart:
+
+```powershell
+.\.venv\Scripts\python.exe -m services.bootup start
+```
+
+Vectorize, the API, verification, querying, and evaluation share a model-index catalog.
+API startup reuses a completed matching vectorize index without embedding it again.
+When switching models, vectorize/API select an isolated collection and BM25 index.
+If missing, API startup re-embeds the repository before accepting queries.
+The original index and other model indexes are preserved;
+switching back reuses a completed matching index. Changing only the chat model
+does not rebuild embeddings. Configuration changes take effect on restart, not live.
+
+The first build may take longer than a normal startup. Terminal launches show a
+live loading bar; progress/errors are also written to
+`%LOCALAPPDATA%\Vectorizer\logs\index-preparation.log`. Windowless launches keep
+logging without requiring a terminal. Failed builds stop startup
+instead of serving mismatched vectors. A retry resumes compatible completed batches.
+No model downloads happen automatically.
+
+New repository indexing runs record source paths and chunk settings in a small
+collection manifest. Bootup/API use `repository_path` from the selected bootup
+configuration, including when preparing an older index without a source manifest.
+For a temporary source override, explicitly set its path before launching:
+
+```powershell
+$env:RAG_REPOSITORY_PATH = "C:\Repos\FAK"
+.\.venv\Scripts\python.exe -m services.bootup start
+```
+
+`RAG_DB_PATH` chooses the database directory; `RAG_COLLECTION` chooses the **base**
+collection/source manifest, not the effective model-specific API collection.
+Standalone Uvicorn startup performs the same preparation. All commands and low-level
+embedding/retrieval helpers read the configured model when no explicit model is supplied.
+`--embedding-model` overrides the default; query/evaluation chat flags override `chat_model`.
+`RAG_MODEL_CONFIG` selects an alternate model config file, and
+`OLLAMA_EMBEDDING_MODEL` overrides the config default, just as for the API.
+Missing or invalid model configuration fails clearly rather than silently selecting 0.6B.
+`RAG_DB_PATH` and `RAG_COLLECTION` are shared CLI defaults; explicit flags still win.
+
 ## How embedding works
 
 1. **Filter and chunk:** eligible UTF-8 text is split around Python definitions and Markdown sections. Oversized sections are split with overlap. Common secrets, binaries, caches, and generated files are excluded; review filters before indexing sensitive repositories.
@@ -82,7 +139,12 @@ Bootup reads the saved WebUI connection key, restarts verified service trees, wa
 
 ## Embed a repository
 
-Replace the example path with your repository. Ollama must be running:
+Replace the example path with your repository. The vectorize CLI checks Ollama
+first and starts `ollama serve` automatically if the configured local HTTP server
+is stopped. Ollama must be installed and the embedding model already pulled.
+Existing servers are left alone; remote servers must be started separately.
+An automatically started server remains running after indexing. Startup output is
+saved to `%LOCALAPPDATA%\Vectorizer\logs\ollama-vectorize.log` on Windows.
 
 ```powershell
 .\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Repos\FAK"
@@ -97,6 +159,11 @@ Rerun indexing after source changes. Verification audits index consistency, not 
 .\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Repos\FAK" --collection my_repo --chunk-size 1400 --overlap 180
 ```
 
-Keep the database path, collection, and embedding model consistent across indexing, verification, and querying. Set `RAG_COLLECTION` before bootup when using a custom collection. A different embedding model requires a matching index and explicit `--embedding-model` on the indexing/verification commands; changing only the chat model does not require reindexing.
+Keep the database path and base collection consistent across commands. Set `RAG_COLLECTION` before bootup when using a custom base collection. Change `embedding_model` in `config/models.json` and rerun vectorize to build or refresh that model's index; it selects a separate collection automatically if the base belongs to another model. Querying and verification resolve the same model-specific collection. Other model indexes are preserved. Reindex after source changes; unchanged source snapshots remain reusable when switching models. Single-file indexing remains explicit: choose a separate `--collection` when changing its embedding model.
 
 **Code layout:** `vectorizer/` = RAG; `Interface/` = chat/API; `services/` = startup; `common/` = shared settings; `evaluation/` = evaluation tools. `Interface` is case-sensitive on Linux.
+
+Index manifests and model-specific collection lookup live in
+`vectorizer/index_catalog.py`; preparation/build orchestration lives in
+`vectorizer/managed_index.py`. Retrieval and verification resolve existing indexes
+without importing or triggering the build orchestrator.

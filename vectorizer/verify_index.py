@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -13,33 +14,37 @@ import chromadb
 
 from .chunking import CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, DEFAULT_EMBEDDING_BYTES, chunk_file
 from .keyword_index import bm25_path as _bm25_path
+from .index_catalog import matching_index
 from .source_files import discover_files
 from .vector_store import collection_snapshot as _collection_snapshot
-from common.model_config import DEFAULT_EMBEDDING_MODEL
-from common.paths import DEFAULT_DB_PATH, resolve_path
+from common.model_config import resolve_embedding_model
+from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
 from common.progress import ProgressBar
 from .repository_index import (
-    DEFAULT_REPOSITORY,
     _hash,
     repository_chunk_id,
 )
 
-KNOWN_VECTOR_DIMENSIONS = {"qwen3-embedding:0.6b": 1024}
+KNOWN_VECTOR_DIMENSIONS = {"qwen3-embedding:0.6b": 1024, "qwen3-embedding:4b": 2560,
+                          "qwen3-embedding:8b": 4096}
 
 
-def verify_repository_index(repository: str | Path = DEFAULT_REPOSITORY, *,
+def verify_repository_index(repository: str | Path | None = None, *,
                             db_path: str | Path = DEFAULT_DB_PATH,
                             collection_name: str = "repo_documents",
-                            embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+                            embedding_model: str | None = None,
                             chunk_size: int = 1400, overlap: int = 180,
                             page_size: int = 256,
                             max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES) -> dict:
     """Compare the current source's expected chunk IDs with every stored vector and FTS row."""
-    root, db_dir = resolve_path(repository), resolve_path(db_path)
+    embedding_model = resolve_embedding_model(embedding_model)
+    root = configured_repository() if repository is None else resolve_path(repository)
+    db_dir = resolve_path(db_path)
     if not root.is_dir():
         raise ValueError(f"repository is not a directory: {root}")
     if page_size < 1:
         raise ValueError("page size must be positive")
+    collection_name = matching_index(db_dir, collection_name, embedding_model)
 
     repo_key = _hash(str(root).casefold())[:20]
     files = discover_files(root)
@@ -122,8 +127,8 @@ def verify_repository_index(repository: str | Path = DEFAULT_REPOSITORY, *,
         "missing_bm25_rows": len(missing_bm25), "unexpected_bm25_rows": len(extra_bm25),
         "ok": not (skipped or missing or unexpected or bad_metadata or invalid_vectors
                    or missing_bm25 or extra_bm25 or len(dimensions) != 1
-                   or (embedding_model in KNOWN_VECTOR_DIMENSIONS
-                       and dimensions != {KNOWN_VECTOR_DIMENSIONS[embedding_model]})),
+                    or (embedding_model.lower() in KNOWN_VECTOR_DIMENSIONS
+                        and dimensions != {KNOWN_VECTOR_DIMENSIONS[embedding_model.lower()]})),
         "details": {
             "skipped_files": skipped[:10], "missing_vector_ids": list(missing)[:10],
             "unexpected_vector_ids": list(unexpected)[:10], "bad_metadata_ids": bad_metadata[:10],
@@ -137,15 +142,17 @@ def verify_repository_index(repository: str | Path = DEFAULT_REPOSITORY, *,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("path", nargs="?", type=resolve_path, default=DEFAULT_REPOSITORY)
-    parser.add_argument("--db-path", type=resolve_path, default=DEFAULT_DB_PATH)
-    parser.add_argument("--collection", default="repo_documents")
-    parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument("path", nargs="?", type=resolve_path, default=None,
+                        help="repository directory (default: repository_path in config/bootup.json)")
+    parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))))
+    parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))
+    parser.add_argument("--embedding-model", default=None, help="override the configured embedding model")
     parser.add_argument("--chunk-size", type=int, default=1400)
     parser.add_argument("--overlap", type=int, default=180)
     parser.add_argument("--max-embedding-bytes", type=int, default=DEFAULT_EMBEDDING_BYTES)
     args = parser.parse_args()
     try:
+        args.embedding_model = resolve_embedding_model(args.embedding_model)
         result = verify_repository_index(args.path, db_path=args.db_path,
             collection_name=args.collection, embedding_model=args.embedding_model,
             chunk_size=args.chunk_size, overlap=args.overlap, max_embedding_bytes=args.max_embedding_bytes)

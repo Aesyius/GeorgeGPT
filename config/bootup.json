@@ -1,4 +1,5 @@
 {
+  "repository_path": "C:/Users/Cyber.DESKTOP-MAG5LP5.000/Desktop/Project/FAK",
   "models_config": "config/models.json",
   "startup_timeout_seconds": 240,
   "poll_interval_seconds": 3,

@@ -259,6 +259,22 @@ def start_rag_api(config: dict, settings: StartupSettings, api_key: str) -> None
     env.update(settings.models.environment(settings.models_path))
     env[config.get("api_key_env_var", "RAG_API_KEY")] = api_key
     env["OLLAMA_BASE_URL"] = ollama_url
+    env["RAG_REPOSITORY_PATH"] = str(settings.repository_path)
+    # Build before launching Uvicorn: a first embedding pass can legitimately
+    # take longer than the service HTTP readiness timeout.
+    print("Preparing the configured embedding model's index (also logged to index-preparation.log).", flush=True)
+    settings.logs.mkdir(parents=True, exist_ok=True)
+    terminal = any(stream is not None and stream.isatty() for stream in (sys.stdout, sys.stderr))
+    result = subprocess.run(
+        [str(python), "-m", "services.index_preparation",
+         "--log-path", str(settings.logs / "index-preparation.log")],
+        cwd=settings.root, env=env, stdout=sys.stdout, stderr=sys.stderr,
+        startupinfo=None if terminal else hidden_startupinfo(),
+        creationflags=0 if terminal else getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if result.returncode:
+        raise BootError(f"Embedding index preparation failed; see {settings.logs / 'index-preparation.log'}. "
+                        "The API and WebUI were not started.")
     pid = launch([str(python), "-m", "uvicorn", API_APP, "--host", api["host"],
                   "--port", str(api["port"])], cwd=settings.root, env=env, log_path=settings.logs / "rag-api.log")
     print(f"Started RAG API (PID {pid}).")

@@ -5,11 +5,11 @@ import sys
 import time
 
 from langchain_ollama import OllamaEmbeddings
-from common.model_config import DEFAULT_EMBEDDING_MODEL, DEFAULT_KEEP_ALIVE_SECONDS, validate_keep_alive
+from common.model_config import resolve_embedding_model, DEFAULT_KEEP_ALIVE_SECONDS, validate_keep_alive
 
 
 def create_embeddings(
-    model: str = DEFAULT_EMBEDDING_MODEL,
+    model: str | None = None,
     base_url: str | None = None,
     *, keep_alive_seconds: int | None = None,
 ) -> OllamaEmbeddings:
@@ -18,7 +18,7 @@ def create_embeddings(
         keep_alive_seconds = int(os.getenv("OLLAMA_KEEP_ALIVE_SECONDS", str(DEFAULT_KEEP_ALIVE_SECONDS)))
     validate_keep_alive(keep_alive_seconds)
     return OllamaEmbeddings(
-        model=model,
+        model=resolve_embedding_model(model),
         base_url=base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         keep_alive=keep_alive_seconds,
     )
