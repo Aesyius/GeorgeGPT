@@ -4,7 +4,14 @@
 
 GeorgeGPT is a Portuguese RAG enabled LLM that answers questions using indexed repository code and documentation. The application retrieves relevant passages using Chroma semantic search and SQLite FTS5/BM25 keyword search, then sends that evidence to an Ollama chat model. Open WebUI connects through the authenticated `GeorgeGPT` API; its own Knowledge/RAG is not used.
 
-The chatbot cannot execute commands, access additional files, or inspect live infrastructure. Its answers describe indexed evidence, not verified live system state.
+### How it improves accuracy
+
+- **RAG:** supplies relevant repository evidence with each question, reducing reliance on the chat model's general knowledge and helping limit unsupported answers.
+- **Indexing:** splits code and documentation into searchable chunks with file paths, headings, and symbols, so retrieval can find focused evidence rather than send the entire repository.
+- **Semantic search + BM25:** embeddings find passages with similar meaning, while BM25 finds exact terms such as function names, configuration keys, and error messages. Combining their rankings helps cover both kinds of questions.
+- **Stronger embedding models:** can improve which chunks are retrieved, particularly for code and technical questions. Larger models use more memory and compute; benchmark them on repository questions rather than assuming size alone guarantees accuracy.
+
+Accuracy still depends on relevant, up-to-date source material. Reindex after repository changes.
 
 ## Initialize everything — Windows PowerShell
 
