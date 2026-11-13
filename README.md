@@ -37,6 +37,21 @@ Open PowerShell in this project folder. If this stack is already running, stop i
 
 Choose models that fit your hardware. Setup downloads missing models using the exact tags in `config/models.json`.
 
+**Recommended setup — 12 GB VRAM**
+
+The current configuration targets **100% GPU residency for both models on a 12 GB VRAM GPU**, balancing repository retrieval quality with room for chat generation:
+
+| Setting | Recommendation |
+| --- | --- |
+| Chat model | `qwen3.5:9b` |
+| Embedding model | `qwen3-embedding:4B` |
+| Chat context window | `16384` tokens |
+| Model retention | `1800` seconds |
+
+The 4B embedder provides richer retrieval representations than the smaller 0.6B variant, while the 9B chat model handles answers grounded in retrieved evidence. Keeping both GPU-resident avoids repeated model swapping between retrieval and generation.
+
+Full GPU residency is a target, not a guarantee: quantization, Ollama version, context allocation, and other GPU applications affect memory use. Check `ollama ps` after a query for **`100% GPU` on both model rows**, and use `nvidia-smi` to inspect total VRAM consumption. If either model spills onto the CPU, reduce the context window or free GPU memory.
+
 The `repository_path` setting accepts an absolute path or a path relative to this project root. The setup command below saves your selected repository there automatically.
 
 ### 3. Run setup
