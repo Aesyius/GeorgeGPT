@@ -1,176 +1,208 @@
 # GeorgeGPT — Repository RAG Chatbot
 
-## How it works
-
-GeorgeGPT is a Portuguese RAG enabled LLM that answers questions using indexed repository code and documentation. The application retrieves relevant passages using Chroma semantic search and SQLite FTS5/BM25 keyword search, then sends that evidence to an Ollama chat model. Open WebUI connects through the authenticated `GeorgeGPT` API; its own Knowledge/RAG is not used.
+GeorgeGPT is a Portuguese-language chatbot that answers questions about your repository's code and documentation. It runs locally with **Ollama** for chat and embeddings, **Chroma** for semantic retrieval, **SQLite FTS5/BM25** for keyword retrieval, and **Open WebUI** as the chat interface.
 
 ### How it improves accuracy
 
-- **RAG:** supplies relevant repository evidence with each question, reducing reliance on the chat model's general knowledge and helping limit unsupported answers.
-- **Indexing:** splits code and documentation into searchable chunks with file paths, headings, and symbols, so retrieval can find focused evidence rather than send the entire repository.
-- **Semantic search + BM25:** embeddings find passages with similar meaning, while BM25 finds exact terms such as function names, configuration keys, and error messages. Combining their rankings helps cover both kinds of questions.
-- **Stronger embedding models:** can improve which chunks are retrieved, particularly for code and technical questions. Larger models use more memory and compute; benchmark them on repository questions rather than assuming size alone guarantees accuracy.
+- **RAG (retrieval-augmented generation):** gives the chat model relevant repository passages alongside your question, reducing reliance on general knowledge and helping limit unsupported answers.
+- **Indexing:** splits files into focused chunks, preserving paths, headings, symbols, and line ranges. Embeddings turn those chunks into searchable vectors; indexing does not train the chat model.
+- **Semantic search + BM25:** semantic search finds similar meaning, while BM25 matches exact terms such as function names, configuration keys, and error messages. Combining their rankings helps retrieve evidence for both conceptual and precise questions.
+- **Stronger embedding models:** can improve code and technical retrieval, but require more memory and compute. Larger models do not guarantee better results—compare them on questions about your repository.
 
-Accuracy still depends on relevant, up-to-date source material. Reindex after repository changes.
+When you ask a question, the embedder converts the question into a vector, retrieves relevant stored chunks, and passes that evidence to the chat model. The repository is not re-embedded for every question. Accuracy depends on source quality and freshness, so reindex after changes.
 
-## Initialize everything — Windows PowerShell
+Open WebUI connects through the authenticated **GeorgeGPT** API. Its own Knowledge/RAG feature is not used.
 
-Install **64-bit Python 3.12** and **Ollama**, ensure Ollama is running, and open PowerShell in this project folder. Replace `C:\Repos\FAK` with your repository:
+## User setup guide
+
+### 1. Install prerequisites
+
+On Windows, install:
+
+- **64-bit Python 3.12**, including the `py` launcher.
+- **Ollama**, with its local server running.
+
+Open PowerShell in this project folder. If this stack is already running, stop it before repeating setup:
+
+```powershell
+.\.venv\Scripts\python.exe -m services.bootup kill
+```
+
+### 2. Review configuration
+
+| File | Settings |
+| --- | --- |
+| `config/models.json` | Chat model, embedding model, context window, and model retention |
+| `config/bootup.json` | Repository path, executable paths, service ports, and log directory |
+
+Choose models that fit your hardware. Setup downloads missing models using the exact tags in `config/models.json`.
+
+The `repository_path` setting accepts an absolute path or a path relative to this project root. The setup command below saves your selected repository there automatically.
+
+### 3. Run setup
+
+Replace the example path with the repository you want to search:
 
 ```powershell
 .\setup.ps1 -RepositoryPath "C:\Repos\FAK"
-# Preview without installing, downloading, indexing, or starting anything:
-.\setup.ps1 -RepositoryPath "C:\Repos\FAK" -WhatIf
 ```
 
-The setup script:
-- Creates or reuses `.venv` and `.venv-webui`, then installs dependencies.
-- Reads `config/models.json`, reuses installed models, and downloads only missing models.
-- Indexes your repository, verifies the index, and launches the API and WebUI.
-- Saves the selected repository as `repository_path` in `config/bootup.json` for future launches.
-- Opens the browser for administrator registration and connection setup; existing saved API keys are reused.
+Setup creates or reuses the Python environments, installs dependencies, pulls missing models, indexes and verifies your repository, and launches the API and Open WebUI.
 
-Stop an already-running stack before setup. In WebUI, create your administrator account and save the OpenAI-compatible connection at **`http://127.0.0.1:8001/v1`**. The API key is supplied to WebUI without being printed; if needed, type **C** at the setup prompt to copy it, then clear your clipboard after saving. Press **Enter** to verify the connection. Keep WebUI Knowledge disabled and select **GeorgeGPT**.
+Review source filters before indexing sensitive repositories. Common secrets, binaries, caches, and generated files are excluded.
 
-Options: `-NoBrowser` skips opening the browser; `-ConfigPath` selects another bootup config. Setup leaves launched services running if interrupted; use the stop command below. If PowerShell blocks a trusted checkout:
+Optional setup commands:
+
+```powershell
+# Preview without installing, downloading, indexing, or starting services:
+.\setup.ps1 -RepositoryPath "C:\Repos\FAK" -WhatIf
+
+# Skip opening the browser:
+.\setup.ps1 -RepositoryPath "C:\Repos\FAK" -NoBrowser
+```
+
+Use `-ConfigPath` to select another bootup configuration. If PowerShell blocks a trusted checkout, use a process-only policy bypass:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -RepositoryPath "C:\Repos\FAK"
 ```
 
-This bypass applies only to that PowerShell process; it does not change the machine policy.
+### 4. Connect Open WebUI
+
+1. Open **http://127.0.0.1:8080** and create your administrator account.
+2. In **Admin Settings → Connections**, save an OpenAI-compatible connection with URL **`http://127.0.0.1:8001/v1`**.
+3. Use the API key supplied during setup. Type **C** at the setup prompt to copy it if needed, then clear your clipboard after saving.
+4. Press **Enter** in the setup terminal to verify the saved connection.
+5. Select **GeorgeGPT** and keep WebUI Knowledge disabled.
+
+These URLs use the default ports. Existing saved connection keys are reused. If setup is interrupted, services already launched remain running; use the stop command to shut them down.
 
 <details>
-<summary>Manual setup alternative</summary>
+<summary>Manual installation alternative</summary>
+
+First set `repository_path` in `config/bootup.json` and choose models in `config/models.json`. With Ollama running:
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 py -3.12 -m venv .venv-webui
 .\.venv-webui\Scripts\python.exe -m pip install open-webui
+
 $models = Get-Content .\config\models.json -Raw | ConvertFrom-Json
 ollama pull $models.chat_model
 ollama pull $models.embedding_model
-.\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Repos\FAK"
+.\.venv\Scripts\python.exe -m vectorizer.vectorize
+.\.venv\Scripts\python.exe -m vectorizer.verify_index
 ```
 
-**First-time connection setup:** start the API in one terminal using your own long, random API key:
+Start the API in one terminal with your own long, random key:
 
 ```powershell
 $env:RAG_API_KEY = "replace-with-your-own-long-random-secret"
 .\.venv\Scripts\python.exe -m uvicorn Interface.server:app --host 127.0.0.1 --port 8001
 ```
 
-In another terminal, start WebUI:
+Start WebUI in another terminal:
 
 ```powershell
 .\.venv-webui\Scripts\python.exe -c "from open_webui import app; app()" serve --host 127.0.0.1 --port 8080
 ```
 
-Open **http://127.0.0.1:8080**, create the administrator account, and save an OpenAI-compatible connection with URL **`http://127.0.0.1:8001/v1`** and the same API key. Keep WebUI Knowledge disabled.
+Save the connection described above using the same API key. Once it is saved, use the normal bootup command for subsequent launches.
 
 </details>
 
-### Subsequent launches
+## Usage guide
 
-The repository (`repository_path`), executable paths, WebUI database, and ports are configured in `config/bootup.json`; models, context size, and retention are in `config/models.json`.
+### Start and stop
 
-`repository_path` can be absolute or relative to this project root. Vectorize and
-verification use it when their positional repository argument is omitted:
+Run commands from the project root:
+
+```powershell
+# Start or restart Ollama, the API, and Open WebUI:
+.\.venv\Scripts\python.exe -m services.bootup start
+
+# Stop the stack:
+.\.venv\Scripts\python.exe -m services.bootup kill
+```
+
+Bootup reads the saved connection key, restarts verified service trees, warms the selected models, prepares the matching index, and checks readiness. Restarting interrupts active chats.
+
+### Ask questions
+
+Open **http://127.0.0.1:8080**, select **GeorgeGPT**, and ask about the indexed repository. Include relevant symbols, paths, or error messages when you know them.
+
+You can also query from the terminal while Ollama is running:
+
+```powershell
+.\.venv\Scripts\python.exe -m Interface.ask "How does repository indexing work?"
+```
+
+### Update the index
+
+After changing repository files:
 
 ```powershell
 .\.venv\Scripts\python.exe -m vectorizer.vectorize
 .\.venv\Scripts\python.exe -m vectorizer.verify_index
 ```
 
-Explicit CLI paths and `RAG_REPOSITORY_PATH` override the configured default.
-For standalone commands, `RAG_BOOTUP_CONFIG` selects an alternate bootup JSON file;
-`services.bootup --config` passes its selected repository to the API and preparation process.
+Both commands use the configured repository and embedding model. Reindexing reuses compatible unchanged vectors, embeds new or changed chunks, and removes stale chunks. Verification audits vector, metadata, and keyword-index consistency—not answer accuracy.
 
-```powershell
-.\.venv\Scripts\python.exe -m services.bootup start
-# Stop all three services:
-.\.venv\Scripts\python.exe -m services.bootup kill
-```
+The vectorize CLI starts a stopped local HTTP Ollama server automatically. Ollama must be installed and the embedding model already pulled; remote servers must be started separately. An automatically started server remains running afterward.
 
-Bootup reads the saved WebUI connection key, restarts verified service trees, warms both models, and checks readiness. Active chats are interrupted by a restart. Select **GeorgeGPT** in WebUI. Logs default to `%LOCALAPPDATA%\Vectorizer\logs`.
+To change repositories, update `repository_path` in `config/bootup.json`, run the two commands above, and restart the stack. A positional path can override the repository for an individual command.
 
-### Change the embedding model
+### Change models
 
-Change `embedding_model` in `config/models.json`, ensure that exact Ollama tag is installed, and restart:
+1. Edit `chat_model` or `embedding_model` in `config/models.json`.
+2. Pull the selected models:
 
-```powershell
-.\.venv\Scripts\python.exe -m services.bootup start
-```
+   ```powershell
+   $models = Get-Content .\config\models.json -Raw | ConvertFrom-Json
+   ollama pull $models.chat_model
+   ollama pull $models.embedding_model
+   ```
 
-Vectorize, the API, verification, querying, and evaluation share a model-index catalog.
-API startup reuses a completed matching vectorize index without embedding it again.
-When switching models, vectorize/API select an isolated collection and BM25 index.
-If missing, API startup re-embeds the repository before accepting queries.
-The original index and other model indexes are preserved;
-switching back reuses a completed matching index. Changing only the chat model
-does not rebuild embeddings. Configuration changes take effect on restart, not live.
+3. Restart:
 
-The first build may take longer than a normal startup. Terminal launches show a
-live loading bar; progress/errors are also written to
-`%LOCALAPPDATA%\Vectorizer\logs\index-preparation.log`. Windowless launches keep
-logging without requiring a terminal. Failed builds stop startup
-instead of serving mismatched vectors. A retry resumes compatible completed batches.
-No model downloads happen automatically.
+   ```powershell
+   .\.venv\Scripts\python.exe -m services.bootup start
+   ```
 
-New repository indexing runs record source paths and chunk settings in a small
-collection manifest. Bootup/API use `repository_path` from the selected bootup
-configuration, including when preparing an older index without a source manifest.
-For a temporary source override, explicitly set its path before launching:
+Changing only the chat model does not rebuild embeddings. Changing the embedder selects a matching model-specific index or builds it before accepting questions. Existing model indexes are preserved, and switching back reuses a completed matching snapshot.
 
-```powershell
-$env:RAG_REPOSITORY_PATH = "C:\Repos\FAK"
-.\.venv\Scripts\python.exe -m services.bootup start
-```
+Vectorize and API startup share the same index catalog, so a matching completed vectorize run is not embedded again. Configuration changes take effect on restart, not during an active session. Normal startup does not download missing models.
 
-`RAG_DB_PATH` chooses the database directory; `RAG_COLLECTION` chooses the **base**
-collection/source manifest, not the effective model-specific API collection.
-Standalone Uvicorn startup performs the same preparation. All commands and low-level
-embedding/retrieval helpers read the configured model when no explicit model is supplied.
-`--embedding-model` overrides the default; query/evaluation chat flags override `chat_model`.
-`RAG_MODEL_CONFIG` selects an alternate model config file, and
-`OLLAMA_EMBEDDING_MODEL` overrides the config default, just as for the API.
-Missing or invalid model configuration fails clearly rather than silently selecting 0.6B.
-`RAG_DB_PATH` and `RAG_COLLECTION` are shared CLI defaults; explicit flags still win.
+### Progress and logs
 
-## How embedding works
+First-time indexing with a new embedder can take longer than a normal startup. Terminal launches show a loading bar; windowless launches continue writing logs.
 
-1. **Filter and chunk:** eligible UTF-8 text is split around Python definitions and Markdown sections. Oversized sections are split with overlap. Common secrets, binaries, caches, and generated files are excluded; review filters before indexing sensitive repositories.
-2. **Embed:** Ollama converts each chunk into a numeric vector. Relative file paths, headings, and symbols add context to the embedding input, while stored evidence retains the source text and line ranges.
-3. **Store:** Chroma saves vectors and SQLite saves keyword-search rows under project-root `chroma_db/`. Reindexing reuses compatible unchanged vectors, embeds changes, and removes stale chunks. This does not train the chat model.
+Logs default to **`%LOCALAPPDATA%\Vectorizer\logs`**:
 
-## Embed a repository
+| Log | Purpose |
+| --- | --- |
+| `index-preparation.log` | Index build progress and preparation failures |
+| `ollama-vectorize.log` | Ollama output when started automatically by vectorize |
+| `ollama.log` | Ollama output during normal bootup |
+| `rag-api.log` | API requests and errors |
+| `open-webui.log` | WebUI output |
 
-Replace the example path with your repository. The vectorize CLI checks Ollama
-first and starts `ollama serve` automatically if the configured local HTTP server
-is stopped. Ollama must be installed and the embedding model already pulled.
-Existing servers are left alone; remote servers must be started separately.
-An automatically started server remains running after indexing. Startup output is
-saved to `%LOCALAPPDATA%\Vectorizer\logs\ollama-vectorize.log` on Windows.
+If preparation fails, startup stops rather than serving mismatched vectors. Review the log and retry; compatible completed embedding batches can be reused. Index data persists under project-root **`chroma_db/`** by default.
 
-```powershell
-.\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Repos\FAK"
-.\.venv\Scripts\python.exe -m vectorizer.verify_index "C:\Repos\FAK"
-```
+<details>
+<summary>Advanced configuration and overrides</summary>
 
-Rerun indexing after source changes. Verification audits index consistency, not answer accuracy. Available options:
+- `RAG_REPOSITORY_PATH`: temporary repository override.
+- `RAG_DB_PATH`: alternate database directory.
+- `RAG_COLLECTION`: base collection/catalog name; commands resolve its model-specific index.
+- `RAG_BOOTUP_CONFIG`: alternate bootup JSON for standalone commands. Use `services.bootup --config PATH` for stack startup.
+- `RAG_MODEL_CONFIG`: alternate model JSON for standalone commands.
+- `OLLAMA_BASE_URL`: alternate Ollama endpoint for standalone commands.
+- `OLLAMA_EMBEDDING_MODEL` / `OLLAMA_CHAT_MODEL`: model overrides for standalone commands and direct API launches. Bootup passes the models selected by its JSON configuration.
 
-```powershell
-.\.venv\Scripts\python.exe -m vectorizer.vectorize --help
-# Example: a separate collection with explicit chunk settings
-.\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Repos\FAK" --collection my_repo --chunk-size 1400 --overlap 180
-```
+Explicit CLI flags such as `--embedding-model`, `--db-path`, and `--collection` override command defaults. Keep the database and base collection consistent between indexing, querying, verification, and startup. Use `--help` on individual commands for additional options.
 
-Keep the database path and base collection consistent across commands. Set `RAG_COLLECTION` before bootup when using a custom base collection. Change `embedding_model` in `config/models.json` and rerun vectorize to build or refresh that model's index; it selects a separate collection automatically if the base belongs to another model. Querying and verification resolve the same model-specific collection. Other model indexes are preserved. Reindex after source changes; unchanged source snapshots remain reusable when switching models. Single-file indexing remains explicit: choose a separate `--collection` when changing its embedding model.
+For single-file indexing, explicitly choose a separate collection when changing embedding models.
 
-**Code layout:** `vectorizer/` = RAG; `Interface/` = chat/API; `services/` = startup; `common/` = shared settings; `evaluation/` = evaluation tools. `Interface` is case-sensitive on Linux.
-
-Index manifests and model-specific collection lookup live in
-`vectorizer/index_catalog.py`; preparation/build orchestration lives in
-`vectorizer/managed_index.py`. Retrieval and verification resolve existing indexes
-without importing or triggering the build orchestrator.
+</details>
