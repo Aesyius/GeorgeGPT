@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import json
 import os
+import random
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -33,6 +34,29 @@ API_APP = "Interface.server:app"
 # Recognize already-running instances from before the directory restructure.
 VERIFIED_API_APPS = {API_APP, "vectorizer.server:app"}
 PROCESS_IDENTITY_FIELDS = ("ExecutablePath", "CommandLine", "ParentProcessId", "CreationDate")
+
+
+def print_startup_banner(stream=None) -> None:
+    """Choose one banner supported by the output stream's encoding."""
+    stream = stream if stream is not None else sys.stdout
+    if stream is None:
+        return
+    artwork = Path(__file__).with_name("startup_banner.txt").read_text(encoding="utf-8")
+    encoding = getattr(stream, "encoding", None) or "utf-8"
+    supported = []
+    for banner in artwork.split("\n\n"):
+        if not banner.strip():
+            continue
+        try:
+            banner.encode(encoding)
+        except UnicodeEncodeError:
+            continue
+        supported.append(banner.strip("\n"))
+    if not supported:
+        return
+    banner = random.choice(supported)
+    stream.write("\n" + banner + "\n")
+    stream.flush()
 
 
 def configure_windowless_output(config_path: Path) -> None:
@@ -345,6 +369,8 @@ def main() -> int:
         parser.error("--service and --dry-run are only supported with kill/stop")
     config_path = args.config.resolve()
     configure_windowless_output(config_path)
+    if not stopping:
+        print_startup_banner()
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
