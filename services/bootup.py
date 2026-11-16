@@ -65,7 +65,7 @@ def configure_windowless_output(config_path: Path) -> None:
         return
     logs = Path(os.getenv("LOCALAPPDATA", str(PROJECT_ROOT))) / "Vectorizer" / "logs"
     try:
-        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config = json.loads(config_path.read_text(encoding="utf-8-sig"))
         logs = expand_path(config["logs_directory"], PROJECT_ROOT)
     except (OSError, ValueError, KeyError, TypeError):
         pass  # main reports configuration errors once stderr is available.
@@ -282,6 +282,8 @@ def start_rag_api(config: dict, settings: StartupSettings, api_key: str) -> None
     env = os.environ.copy()
     env.update(settings.models.environment(settings.models_path))
     env[config.get("api_key_env_var", "RAG_API_KEY")] = api_key
+    env["RAG_API_KEY"] = api_key
+    env["PYTHONUTF8"] = "1"
     env["OLLAMA_BASE_URL"] = ollama_url
     env["RAG_REPOSITORY_PATH"] = str(settings.repository_path)
     # Build before launching Uvicorn: a first embedding pass can legitimately
@@ -372,7 +374,7 @@ def main() -> int:
     if not stopping:
         print_startup_banner()
     try:
-        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config = json.loads(config_path.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as error:
         parser.error(f"cannot read config {config_path}: {error}")
     if not stopping:

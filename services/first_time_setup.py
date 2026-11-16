@@ -63,11 +63,6 @@ def wait_for_saved_connection(config: dict, root: Path, key: str, *, read_input=
 
 def bootstrap(config: dict, root: Path, *, open_browser: bool = True) -> None:
     settings = StartupSettings.from_config(config, root)
-    for section in ("ollama", "rag_api", "open_webui"):
-        if config[section]["host"] not in {"127.0.0.1", "localhost"}:
-            raise BootError("First-time setup only supports localhost/127.0.0.1 service hosts.")
-    if config["rag_api"]["openai_base_url"].rstrip("/") != service_url(config["rag_api"]) + "/v1":
-        raise BootError("The WebUI connection URL must match the configured local RAG API URL plus /v1.")
     for section in ("rag_api", "open_webui"):
         if listener_pids(config[section]["port"]):
             raise BootError("API/WebUI ports are occupied. Stop the stack with python -m services.bootup kill, then retry.")
@@ -93,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args(argv)
     try:
-        config = json.loads(args.config.resolve().read_text(encoding="utf-8"))
+        config = json.loads(args.config.resolve().read_text(encoding="utf-8-sig"))
         bootstrap(config, PROJECT_ROOT, open_browser=not args.no_browser)
         return 0
     except (BootError, OSError, ValueError, KeyError, subprocess.SubprocessError, EOFError, KeyboardInterrupt) as error:

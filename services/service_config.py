@@ -21,6 +21,38 @@ def service_url(service: dict) -> str:
     return f"http://{service['host']}:{int(service['port'])}"
 
 
+def validate_local_services(config: dict) -> None:
+    """These are loopback-only listeners, never public/network interfaces."""
+    ports = []
+    for section in ("ollama", "rag_api", "open_webui"):
+        service = config[section]
+        if service["host"] not in {"127.0.0.1", "localhost"}:
+            raise BootError(f"{section}.host must be 127.0.0.1 or localhost; external listeners are not supported.")
+        port = service["port"]
+        if type(port) is not int or not 1 <= port <= 65535:
+            raise BootError(f"{section}.port must be a local service port between 1 and 65535.")
+        ports.append(port)
+    if len(set(ports)) != len(ports):
+        raise BootError("Ollama, API, and WebUI need different local ports on this computer.")
+    if config["rag_api"]["openai_base_url"].rstrip("/") != service_url(config["rag_api"]) + "/v1":
+        raise BootError("The WebUI connection URL must match the configured local RAG API URL plus /v1.")
+
+
+def validate_webui_storage(config: dict, root: Path) -> None:
+    """Reject inherited database overrides rather than touch another app's data."""
+    database = expand_path(config["rag_api"]["open_webui_database"], root)
+    data_dir = os.getenv("DATA_DIR")
+    if data_dir and expand_path(data_dir, root) != database.parent:
+        raise BootError("DATA_DIR conflicts with the configured local WebUI database. Unset it or update bootup.json.")
+    database_url = os.getenv("DATABASE_URL")
+    if database_url and database_url.replace("\\", "/") != "sqlite:///" + database.as_posix():
+        raise BootError("DATABASE_URL conflicts with the configured local SQLite database. Unset it before setup/startup.")
+    if os.getenv("DATABASE_TYPE") not in {None, "", "sqlite"}:
+        raise BootError("This stack uses local SQLite storage; unset inherited DATABASE_TYPE overrides.")
+    if all(os.getenv(name) for name in ("DATABASE_TYPE", "DATABASE_USER", "DATABASE_HOST", "DATABASE_NAME")):
+        raise BootError("Unset inherited DATABASE_* server settings; this stack uses the configured local SQLite file.")
+
+
 @dataclass(frozen=True)
 class StartupSettings:
     root: Path
@@ -32,7 +64,9 @@ class StartupSettings:
     repository_path: Path
 
     @classmethod
-    def from_config(cls, config: dict, root: Path) -> "StartupSettings":
+    def from_config(cls, config: dict, root: Path, *, repository: Path | None = None) -> "StartupSettings":
+        validate_local_services(config)
+        validate_webui_storage(config, root)
         timeout = int(config.get("startup_timeout_seconds", 240))
         interval = int(config.get("poll_interval_seconds", 3))
         if timeout < 1 or interval < 1:
@@ -40,4 +74,4 @@ class StartupSettings:
         models_path = expand_path(config.get("models_config", "config/models.json"), root)
         return cls(root=root, models_path=models_path, models=ModelSettings.from_file(models_path),
                    logs=expand_path(config["logs_directory"], root), timeout=timeout, interval=interval,
-                   repository_path=configured_repository(config, root))
+                   repository_path=repository.resolve() if repository is not None else configured_repository(config, root))

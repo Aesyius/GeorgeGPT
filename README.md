@@ -17,10 +17,29 @@ Open WebUI connects through the authenticated **GeorgeGPT** API. Its own Knowled
 
 ### 1. Install prerequisites
 
-On Windows, install:
+On **Windows 10/11 (64-bit)** with **PowerShell 5.1 or newer**, install:
 
 - **64-bit Python 3.12**, including the `py` launcher.
 - **Ollama**, with its local server running.
+
+Download and extract this repository to a short, writable path such as
+`C:\Projects\GeorgeGPT`, or clone it:
+
+```powershell
+git clone https://github.com/Aesyius/GeorgeGPT.git C:\Projects\GeorgeGPT
+cd C:\Projects\GeorgeGPT
+```
+
+Git is optional when downloading a ZIP. Do not copy another machine's `.venv`
+or `.venv-webui`; setup creates environments for the new machine. Allow space
+for Python dependencies, model weights, and the repository index.
+
+**Local-only operation:** Ollama, the API, and WebUI bind to `127.0.0.1`
+(or `localhost`). Their default ports—11434, 8001, and 8080—are internal to this
+computer. Setup and bootup reject external/wildcard addresses; no firewall rules,
+router port forwarding, or public listeners are added. Installing packages and
+pulling models requires internet; WebUI may also perform its existing model/update
+checks. Repository retrieval and chat inference run locally.
 
 Open PowerShell in this project folder. If this stack is already running, stop it before repeating setup:
 
@@ -63,12 +82,24 @@ Replace the example path with the repository you want to search:
 ```
 
 Setup creates or reuses the Python environments, installs dependencies, pulls missing models, indexes and verifies your repository, and launches the API and Open WebUI.
+Tested direct dependencies are pinned in `requirements.txt` and
+`requirements-webui.txt`, including the WebUI version used by saved-connection
+handling. The repository path is saved for the current machine; the shipped
+`../FAK` value is only a portable default, not a required folder name.
+
+If Ollama is installed somewhere other than `%LOCALAPPDATA%\Programs\Ollama`,
+update `ollama.executable` in `config/bootup.json`. If another program uses one of
+the local ports, choose a different port and update `rag_api.openai_base_url` to
+match when changing the API port. Keep all hosts on loopback.
 
 Review source filters before indexing sensitive repositories. Common secrets, binaries, caches, and generated files are excluded.
 
 Optional setup commands:
 
 ```powershell
+# Validate local configuration using Python's standard library only:
+py -3.12 .\services\setup_check.py --config .\config\bootup.json --repository "C:\Repos\FAK"
+
 # Preview without installing, downloading, indexing, or starting services:
 .\setup.ps1 -RepositoryPath "C:\Repos\FAK" -WhatIf
 
@@ -101,7 +132,7 @@ First set `repository_path` in `config/bootup.json` and choose models in `config
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 py -3.12 -m venv .venv-webui
-.\.venv-webui\Scripts\python.exe -m pip install open-webui
+.\.venv-webui\Scripts\python.exe -m pip install -r requirements-webui.txt
 
 $models = Get-Content .\config\models.json -Raw | ConvertFrom-Json
 ollama pull $models.chat_model
@@ -215,6 +246,10 @@ If preparation fails, startup stops rather than serving mismatched vectors. Revi
 - `RAG_MODEL_CONFIG`: alternate model JSON for standalone commands.
 - `OLLAMA_BASE_URL`: alternate Ollama endpoint for standalone commands.
 - `OLLAMA_EMBEDDING_MODEL` / `OLLAMA_CHAT_MODEL`: model overrides for standalone commands and direct API launches. Bootup passes the models selected by its JSON configuration.
+
+Do not inherit another application's `DATA_DIR` or `DATABASE_*` settings:
+setup/startup reject overrides that conflict with the configured local WebUI
+SQLite file. Existing databases, connection keys, and signing keys are not reset.
 
 Explicit CLI flags such as `--embedding-model`, `--db-path`, and `--collection` override command defaults. Keep the database and base collection consistent between indexing, querying, verification, and startup. Use `--help` on individual commands for additional options.
 

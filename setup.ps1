@@ -1,4 +1,5 @@
-# Requires installed 64-bit Python 3.12 and a running local Ollama server.
+#Requires -Version 5.1
+# All services listen locally. Initial package/model downloads require internet.
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [Parameter(Mandatory = $true)]
@@ -47,11 +48,11 @@ try {
     $repository = (Resolve-Path -LiteralPath $RepositoryPath).Path
     if (-not (Test-Path -LiteralPath $repository -PathType Container)) { throw 'RepositoryPath must be a directory.' }
     $configFile = (Resolve-Path -LiteralPath $ConfigPath).Path
-    $config = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json
+    $config = Get-Content -LiteralPath $configFile -Raw -Encoding UTF8 | ConvertFrom-Json
     $modelsReference = 'config\models.json'
     if ($config.PSObject.Properties['models_config']) { $modelsReference = $config.models_config }
     $modelsFile = Resolve-ProjectPath $modelsReference
-    $models = Get-Content -LiteralPath $modelsFile -Raw | ConvertFrom-Json
+    $models = Get-Content -LiteralPath $modelsFile -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach ($field in @('chat_model', 'embedding_model')) {
         $value = $models.$field
         if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value) -or $value -ne $value.Trim()) {
@@ -70,19 +71,24 @@ try {
     # Keep -WhatIf offline: do not invoke Python, Ollama, or service probes.
     if (-not $WhatIfPreference) {
         Write-Host 'Checking required prerequisites before setup...'
-        $launcher = (Get-Command 'py.exe' -ErrorAction Stop).Source
+        $pythonCommand = Get-Command 'py.exe' -ErrorAction SilentlyContinue
+        if (-not $pythonCommand) { throw 'Install 64-bit Python 3.12 with the py launcher before running setup.' }
+        $launcher = $pythonCommand.Source
         Invoke-Checked $launcher @('-3.12', '-c', 'import sys; assert sys.maxsize > 2**32')
-        # The model loader uses only the standard library, so validate before installs.
-        Invoke-Checked $launcher @('-3.12', '-c', 'import sys; from pathlib import Path; sys.path.insert(0, sys.argv[2]); from common.model_config import ModelSettings; ModelSettings.from_file(Path(sys.argv[1]))', $modelsFile, $PSScriptRoot)
+        # No project dependencies are needed for local-only configuration checks.
+        Invoke-Checked $launcher @('-3.12', (Join-Path $PSScriptRoot 'services\setup_check.py'),
+                                  '--config', $configFile, '--repository', $repository)
         $ollama = Resolve-ProjectPath $config.ollama.executable
-        if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) { throw 'Install Ollama and set its executable path in config/bootup.json first.' }
+        if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) {
+            throw 'Install Ollama or set ollama.executable in config/bootup.json to its actual installation path.'
+        }
         $ollamaUrl = "http://$($config.ollama.host):$($config.ollama.port)"
         try { $tags = Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 5 }
         catch { throw "Ollama is not reachable at $ollamaUrl. Start the Ollama application, then retry." }
         $installedModels = @($tags.models | ForEach-Object { $_.name })
         foreach ($port in @($config.rag_api.port, $config.open_webui.port)) {
             if (@(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue).Count -gt 0) {
-                throw 'API/WebUI services are already running. Stop them with python -m services.bootup kill before setup.'
+                throw 'A configured local API/WebUI port is busy. Stop that service or select another loopback port in bootup.json.'
             }
         }
         Write-Host 'Prerequisites confirmed: Python 3.12, Ollama installed/running, and API/WebUI ports available.' -ForegroundColor Green
@@ -100,13 +106,23 @@ try {
     $config | Add-Member -MemberType NoteProperty -Name repository_path -Value $repository -Force
     [IO.File]::WriteAllText($configFile, ($config | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
 
+    $oldRepositoryPath = $env:RAG_REPOSITORY_PATH
+    $oldPythonUtf8 = $env:PYTHONUTF8
+    $oldConsoleEncoding = [Console]::OutputEncoding
+    $oldOutputEncoding = $OutputEncoding
     Push-Location $PSScriptRoot
     try {
+        $env:RAG_REPOSITORY_PATH = $repository
+        $env:PYTHONUTF8 = '1'
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+        $OutputEncoding = [Console]::OutputEncoding
         Write-Host 'Preparing Python environments...'
         $python = Ensure-Environment '.venv' $launcher
         $web = Ensure-Environment '.venv-webui' $launcher
+        Invoke-Checked $python @('-m', 'pip', 'install', '--upgrade', 'pip')
+        Invoke-Checked $web @('-m', 'pip', 'install', '--upgrade', 'pip')
         Invoke-Checked $python @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'requirements.txt'))
-        Invoke-Checked $web @('-m', 'pip', 'install', 'open-webui')
+        Invoke-Checked $web @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'requirements-webui.txt'))
         $oldOllamaHost = $env:OLLAMA_HOST
         try {
             $env:OLLAMA_HOST = $ollamaUrl
@@ -131,7 +147,13 @@ try {
         $bootstrapOptions = @('-m', 'services.first_time_setup', '--config', $configFile)
         if ($NoBrowser) { $bootstrapOptions += '--no-browser' }
         Invoke-Checked $python $bootstrapOptions
-    } finally { Pop-Location }
+    } finally {
+        Pop-Location
+        $env:RAG_REPOSITORY_PATH = $oldRepositoryPath
+        $env:PYTHONUTF8 = $oldPythonUtf8
+        [Console]::OutputEncoding = $oldConsoleEncoding
+        $OutputEncoding = $oldOutputEncoding
+    }
 } catch {
     [Console]::Error.WriteLine("First-time setup failed: $($_.Exception.Message)")
     exit 1

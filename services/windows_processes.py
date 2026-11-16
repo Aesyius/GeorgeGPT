@@ -127,7 +127,7 @@ def launch(command: list[str], *, cwd: Path, env: dict, log_path: Path) -> int:
     # Do not combine CREATE_NO_WINDOW with DETACHED_PROCESS: Windows ignores it.
     with open(log_path, "a", encoding="utf-8", buffering=1) as stream:
         process = subprocess.Popen(
-            command, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=stream,
+            command, cwd=cwd, env={**env, "PYTHONUTF8": "1"}, stdin=subprocess.DEVNULL, stdout=stream,
             stderr=subprocess.STDOUT, creationflags=flags,
             startupinfo=hidden_startupinfo(), close_fds=True,
         )

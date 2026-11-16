@@ -13,7 +13,7 @@ TEXT_EXTENSIONS = {
     ".hcl", ".sql", ".ps1", ".bat", ".cmd", ".env.example",
 }
 IGNORED_DIRS = {
-    ".git", ".hg", ".svn", ".venv", "venv", "env", "node_modules", "vendor",
+    ".git", ".hg", ".svn", ".venv", ".venv-webui", "venv", "env", "node_modules", "vendor",
     "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", "dist",
     "build", "target", "chroma_db", "site-packages", ".idea", ".vscode",
 }
