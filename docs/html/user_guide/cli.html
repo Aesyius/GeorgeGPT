@@ -311,6 +311,11 @@ automatically launched Ollama remains running.</p>
   <td>Positive maximum chunks per embedding request for repository indexing.</td>
 </tr>
 <tr>
+  <td><code>--chunk-workers N</code></td>
+  <td><code>1</code></td>
+  <td>File preparation processes for repositories only. <code>1</code> is serial; the maximum is <code>10</code>.</td>
+</tr>
+<tr>
   <td><code>--max-embedding-bytes N</code></td>
   <td><code>4096</code></td>
   <td>UTF-8 embedding input cap, including source context; a conservative token-size proxy.</td>
@@ -321,6 +326,12 @@ automatically launched Ollama remains running.</p>
 <p>The single-file workflow uses a fixed embedding batch size of 32 even when
 <code>--batch-size</code> is supplied. Changing single-file embedding models requires
 an explicitly separate collection.</p>
+
+<p>Direct CLI runs default to one worker. <a href="setup.html">First-time setup</a> passes
+four workers by default. Try <code>--chunk-workers 2</code> or <code>--chunk-workers 4</code> for
+large repositories. This parallelizes file preparation, not Ollama embeddings
+or database writes. Small repositories may be faster without the overhead of
+starting worker processes.</p>
 
 <div class="pdoc-code codehilite">
 <pre><span></span><code><span class="p">.\.</span><span class="n">venv</span><span class="p">\</span><span class="n">Scripts</span><span class="p">\</span><span class="n">python</span><span class="p">.</span><span class="n">exe</span> <span class="n">-m</span> <span class="n">vectorizer</span><span class="p">.</span><span class="n">vectorize</span> <span class="s2">"C:\Repos\MyProject"</span> <span class="p">-</span><span class="n">-chunk-size</span> <span class="n">1200</span> <span class="p">-</span><span class="n">-overlap</span> <span class="n">150</span> <span class="p">-</span><span class="n">-batch-size</span> <span class="n">16</span> <span class="p">-</span><span class="n">-max-embedding-bytes</span> <span class="n">4096</span>

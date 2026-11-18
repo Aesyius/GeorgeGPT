@@ -98,7 +98,7 @@ Then preview setup using your actual repository path:
 ```
 
 **Expected result:** the terminal shows the chosen repository, model names,
-and six planned stages. It does not install, download, index, change
+chunk worker count, and six planned stages. It does not install, download, index, change
 configuration, launch services, create logs, or ask for installation consent.
 Preview reads configuration but does not probe Python, Ollama, or service ports.
 
@@ -126,6 +126,15 @@ Once checks pass, setup saves the repository path and performs these stages:
 | 4. Repository index | Chunks eligible files and creates or updates vectors and keyword rows. |
 | 5. Integrity audit | Verifies chunk, metadata, vector, and keyword-index consistency. |
 | 6. Services and connection | Warms models, launches the API and WebUI, and waits for you to save the connection. |
+
+Setup uses **4 chunk worker processes** by default. Workers read and chunk
+eligible files in parallel; embeddings, database writes, and the integrity
+audit are unchanged. Set `-ChunkWorkers` to any value from 1 to 10. For a small
+repository, `-ChunkWorkers 1` avoids the overhead of starting worker processes:
+
+```powershell
+.\setup.ps1 -RepositoryPath "C:\Repos\MyProject" -ChunkWorkers 1
+```
 
 **While you wait:** numbered stages and timestamped messages show progress.
 The loading bar measures steps completed, not time remaining.
@@ -222,6 +231,7 @@ For other failures, use [Troubleshooting](troubleshooting.html).
 | `-ConfigPath PATH` | Project `config/bootup.json` | Existing bootup JSON; supplied relative paths resolve from the current directory. |
 | `-NoBrowser` | Off | Do not open the browser automatically. Services and connection prompts still run. |
 | `-WhatIf` | Off | Offline preview; no installation, consent prompts, or persistent changes. |
+| `-ChunkWorkers` | `4` | Parallel file preparation processes during first-time indexing (1–10). Use `1` for serial chunking. |
 | `-Confirm` | PowerShell default | Additional ShouldProcess confirmation before the setup action. |
 | `-Verbose` | Off | Also show detailed pip/Ollama output in the terminal. |
 

@@ -211,7 +211,7 @@ Then preview setup using your actual repository path:</p>
 </div>
 
 <p><strong>Expected result:</strong> the terminal shows the chosen repository, model names,
-and six planned stages. It does not install, download, index, change
+chunk worker count, and six planned stages. It does not install, download, index, change
 configuration, launch services, create logs, or ask for installation consent.
 Preview reads configuration but does not probe Python, Ollama, or service ports.</p>
 
@@ -268,6 +268,16 @@ Preview reads configuration but does not probe Python, Ollama, or service ports.
 </tr>
 </tbody>
 </table>
+
+<p>Setup uses <strong>4 chunk worker processes</strong> by default. Workers read and chunk
+eligible files in parallel; embeddings, database writes, and the integrity
+audit are unchanged. Set <code>-ChunkWorkers</code> to any value from 1 to 10. For a small
+repository, <code>-ChunkWorkers 1</code> avoids the overhead of starting worker processes:</p>
+
+<div class="pdoc-code codehilite">
+<pre><span></span><code><span class="p">.\</span><span class="n">setup</span><span class="p">.</span><span class="n">ps1</span> <span class="n">-RepositoryPath</span> <span class="s2">"C:\Repos\MyProject"</span> <span class="n">-ChunkWorkers</span> <span class="n">1</span>
+</code></pre>
+</div>
 
 <p><strong>While you wait:</strong> numbered stages and timestamped messages show progress.
 The loading bar measures steps completed, not time remaining.
@@ -391,6 +401,11 @@ For other failures, use <a href="troubleshooting.html">Troubleshooting</a>.</p>
   <td><code>-WhatIf</code></td>
   <td>Off</td>
   <td>Offline preview; no installation, consent prompts, or persistent changes.</td>
+</tr>
+<tr>
+  <td><code>-ChunkWorkers</code></td>
+  <td><code>4</code></td>
+  <td>Parallel file preparation processes during first-time indexing (1–10). Use <code>1</code> for serial chunking.</td>
 </tr>
 <tr>
   <td><code>-Confirm</code></td>

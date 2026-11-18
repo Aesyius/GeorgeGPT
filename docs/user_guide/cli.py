@@ -114,9 +114,11 @@ The single-file workflow uses a fixed embedding batch size of 32 even when
 `--batch-size` is supplied. Changing single-file embedding models requires
 an explicitly separate collection.
 
-Try `--chunk-workers 2` or `--chunk-workers 4` for large repositories. This
-parallelizes file preparation, not Ollama embeddings or database writes. Small
-repositories may be faster without the overhead of starting worker processes.
+Direct CLI runs default to one worker. [First-time setup](setup.html) passes
+four workers by default. Try `--chunk-workers 2` or `--chunk-workers 4` for
+large repositories. This parallelizes file preparation, not Ollama embeddings
+or database writes. Small repositories may be faster without the overhead of
+starting worker processes.
 
 ```powershell
 .\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Repos\MyProject" --chunk-size 1200 --overlap 150 --batch-size 16 --max-embedding-bytes 4096

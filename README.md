@@ -106,6 +106,9 @@ Replace the example path with the repository you want to search:
 ```
 
 Setup creates or reuses the Python environments, installs dependencies, pulls missing models, indexes and verifies your repository, and launches the API and Open WebUI.
+First-time indexing uses **4 worker processes** for file preparation. Use
+`-ChunkWorkers 1` to run serially or choose a value from 1 to 10. This does not
+parallelize embeddings, database writes, or verification.
 Tested direct dependencies are pinned in `requirements.txt` and
 `requirements-webui.txt`, including the WebUI version used by saved-connection
 handling. The repository path is saved for the current machine; the shipped
@@ -129,6 +132,9 @@ py -3.12 .\services\setup_check.py --config .\config\bootup.json --repository "C
 
 # Skip opening the browser:
 .\setup.ps1 -RepositoryPath "C:\Repos\FAK" -NoBrowser
+
+# Disable parallel file preparation:
+.\setup.ps1 -RepositoryPath "C:\Repos\FAK" -ChunkWorkers 1
 
 # Show detailed pip/Ollama output (quiet and logged by default):
 .\setup.ps1 -RepositoryPath "C:\Repos\FAK" -Verbose

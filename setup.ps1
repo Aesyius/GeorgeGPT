@@ -5,7 +5,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$RepositoryPath,
     [string]$ConfigPath,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [ValidateRange(1, 10)]
+    [int]$ChunkWorkers = 4
 )
 
 Set-StrictMode -Version Latest
@@ -160,6 +162,7 @@ try {
     Write-Host "  Repository:      $repository"
     Write-Host "  Chat model:      $($models.chat_model)"
     Write-Host "  Embedding model: $($models.embedding_model)"
+    Write-Host "  Chunk workers:   $ChunkWorkers"
     Write-Host ''
     for ($stepIndex = 0; $stepIndex -lt $script:SetupSteps.Count; $stepIndex++) {
         Write-Host ('  {0}. {1}' -f ($stepIndex + 1), $script:SetupSteps[$stepIndex])
@@ -236,7 +239,7 @@ try {
         $collection = 'repo_documents'
         if ($env:RAG_COLLECTION) { $collection = $env:RAG_COLLECTION }
         $indexOptions = @($repository, '--embedding-model', $models.embedding_model, '--ollama-url', $ollamaUrl,
-                          '--db-path', $database, '--collection', $collection)
+                          '--db-path', $database, '--collection', $collection, '--chunk-workers', $ChunkWorkers)
         Write-SetupStep 4
         Write-Host "Repository: $repository"
         Write-Host "Embedding model: $($models.embedding_model)"

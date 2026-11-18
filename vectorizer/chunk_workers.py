@@ -15,6 +15,7 @@ MAX_CHUNK_WORKERS = 10
 
 
 def validate_chunk_workers(workers: int) -> None:
+    """Raise ValueError unless the worker count is an integer from 1 to 10."""
     if type(workers) is not int or workers < 1:
         raise ValueError("chunk workers must be a positive integer")
     if workers > MAX_CHUNK_WORKERS:
