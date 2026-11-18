@@ -83,7 +83,7 @@ def update_bm25(path: Path, repository: str, documents: Iterable[dict]) -> None:
     """
     with atomic_database(path) as database:
         if path.is_file():
-            with closing(sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)) as source:
+            with closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as source:
                 source.backup(database)
         else:
             database.execute(CREATE_SCHEMA)

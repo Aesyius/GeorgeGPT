@@ -63,7 +63,7 @@ class Retriever:
         query = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms[:32])
         db = None
         try:
-            db = sqlite3.connect(f"file:{self._bm25.as_posix()}?mode=ro", uri=True)
+            db = sqlite3.connect(f"{self._bm25.as_uri()}?mode=ro", uri=True)
             rows = db.execute(
                 "SELECT id, text, path, start_line, end_line, heading, revision, repository, bm25(chunks) AS rank "
                 "FROM chunks WHERE chunks MATCH ? ORDER BY rank LIMIT ?", (query, limit)

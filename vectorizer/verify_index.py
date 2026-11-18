@@ -123,7 +123,7 @@ def verify_repository_index(repository: str | Path | None = None, *,
     bm25_path = _bm25_path(db_dir, collection_name)
     bm25_ids: set[str] = set()
     if bm25_path.is_file():
-        db = sqlite3.connect(f"file:{bm25_path.as_posix()}?mode=ro", uri=True)
+        db = sqlite3.connect(f"{bm25_path.as_uri()}?mode=ro", uri=True)
         try:
             bm25_ids = {row[0] for row in db.execute("SELECT id FROM chunks WHERE repository = ?", (str(root),))}
         finally:

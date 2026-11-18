@@ -110,7 +110,7 @@ def read_api_key(config: dict, root: Path) -> str:
     if not db_path.is_file():
         raise ConnectionNotConfigured(f"Open WebUI database not found: {db_path}. Configure the WebUI connection first.")
     try:
-        connection = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True, timeout=10)
+        connection = sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True, timeout=10)
         try:
             rows = connection.execute(
                 'SELECT "key", value FROM config '

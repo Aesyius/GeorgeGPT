@@ -16,8 +16,10 @@ from httpx import ReadTimeout
 from vectorizer.chunk_workers import iter_prepared_files, validate_chunk_workers
 from vectorizer.embeddings import create_embeddings, embed_documents_with_retry
 from vectorizer.repository_index import index_repository
+from vectorizer.retrieval import Retriever
 from vectorizer.source_files import discover_files
 from vectorizer.vector_store import synchronize_vectors
+from vectorizer.verify_index import verify_repository_index
 
 
 class IndexDiagnosticsTest(unittest.TestCase):
@@ -131,6 +133,7 @@ class ChunkWorkersTest(unittest.TestCase):
             executor.shutdown.assert_called_once_with(wait=True, cancel_futures=True)
 
     def test_index_reuses_vectors_when_worker_count_changes(self):
+        self.db_path = self.db_path.with_name("db # literal %20 café")
         embedder = Mock()
         embedder.embed_documents.side_effect = lambda texts: [[1.0, 0.0] for _ in texts]
         parent_pid = os.getpid()
@@ -156,6 +159,16 @@ class ChunkWorkersTest(unittest.TestCase):
             embedder.embed_documents.assert_not_called()
             self.assertEqual(progress.start.call_args_list[0].args, ("Scanning/chunking files", 4))
             self.assertEqual(progress.advance.call_args_list[:4], [call()] * 4)
+
+        # The audit treats skipped inputs as failures; this file contributed no chunks.
+        (self.root / "d.txt").unlink()
+        report = verify_repository_index(self.root, db_path=self.db_path, embedding_model="test-model")
+        self.assertTrue(report["ok"], report)
+        with patch("vectorizer.retrieval.create_embeddings", return_value=embedder):
+            retriever = Retriever(db_path=self.db_path, embedding_model="test-model")
+            with closing(retriever._client):
+                hits = retriever._keyword_search("Example", 5)
+                self.assertEqual([hit["metadata"]["path"] for hit in hits], ["a.py"])
 
     def snapshot(self):
         with closing(chromadb.PersistentClient(path=str(self.db_path))) as client:
