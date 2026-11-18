@@ -9,7 +9,9 @@ from pathlib import Path
 import sqlite3
 import sys
 
-import chromadb
+from chromadb.errors import ChromaError
+from httpx import HTTPError
+from .chroma_client import open_chroma
 
 from .chunking import CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, DEFAULT_EMBEDDING_BYTES, chunk_file
 from .keyword_index import bm25_path as _bm25_path
@@ -85,7 +87,7 @@ def verify_repository_index(repository: str | Path | None = None, *,
         scan.advance()
     scan.finish()
 
-    client = chromadb.PersistentClient(path=str(db_dir))
+    client = open_chroma(db_dir)
     collection = client.get_collection(name=collection_name)
     actual: set[str] = set()
     bad_metadata: list[str] = []
@@ -177,7 +179,7 @@ def main() -> None:
         result = verify_repository_index(args.path, db_path=args.db_path,
             collection_name=args.collection, embedding_model=args.embedding_model,
             chunk_size=args.chunk_size, overlap=args.overlap, max_embedding_bytes=args.max_embedding_bytes)
-    except (OSError, UnicodeError, ValueError, RuntimeError, sqlite3.Error) as error:
+    except (OSError, ValueError, RuntimeError, sqlite3.Error, ChromaError, HTTPError) as error:
         parser.error(str(error))
     print(f"Verification: {'PASS' if result['ok'] else 'FAIL'}")
     for key in ("repository", "collection", "embedding_model", "files", "expected_chunks",

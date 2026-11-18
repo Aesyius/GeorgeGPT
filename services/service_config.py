@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from common.model_config import ModelSettings
+from common.chroma_endpoint import chroma_port
 from common.paths import configured_repository
 
 
@@ -50,6 +51,8 @@ def validate_local_services(config: dict) -> None:
         ports.append(port)
     if len(set(ports)) != len(ports):
         raise BootError("Ollama, API, and WebUI need different local ports on this computer.")
+    if chroma_port() in ports:
+        raise BootError("RAG_CHROMA_PORT must differ from the Ollama, API, and WebUI ports.")
     if config["rag_api"]["openai_base_url"].rstrip("/") != service_url(config["rag_api"]) + "/v1":
         raise BootError("The WebUI connection URL must match the configured local RAG API URL plus /v1.")
 

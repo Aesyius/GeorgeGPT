@@ -432,6 +432,9 @@ def start_services(config: dict, root: Path) -> None:
     """
     settings = StartupSettings.from_config(config, root)
     api_key = read_api_key(config, root)
+    from .chroma_server import ensure_chroma_server
+
+    ensure_chroma_server(settings.logs / "chroma.log")
     kill_current_processes(config, root)
     start_ollama(config, settings)
     start_rag_api(config, settings, api_key)

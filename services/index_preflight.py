@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 import sys
 from tempfile import TemporaryDirectory
+from uuid import uuid4
 
 
 def _check_sources(repository: Path) -> str:
@@ -34,7 +35,6 @@ def _check_sources(repository: Path) -> str:
 
 
 def _check_storage(db_path: Path, collection: str) -> str:
-    import chromadb
     from vectorizer.keyword_index import CREATE_SCHEMA
 
     parent = db_path
@@ -45,26 +45,35 @@ def _check_storage(db_path: Path, collection: str) -> str:
     try:
         with TemporaryDirectory(prefix="georgegpt-preflight-", dir=parent) as temp:
             root = Path(temp)
-            with closing(chromadb.PersistentClient(path=str(root / "chroma"))) as client:
-                probe = client.create_collection(name=collection)
-                probe.add(ids=["preflight"], embeddings=[[1.0, 0.0]])
             with closing(sqlite3.connect(root / "keyword.sqlite3")) as db:
                 db.execute(CREATE_SCHEMA)
                 db.commit()
     except Exception as error:
         raise RuntimeError(f"Cannot prepare a test index for {db_path} (collection {collection!r}). "
                            f"Check the path, permissions, free space, and RAG_COLLECTION: {error}") from error
-    return f"Temporary Chroma and SQLite FTS5 storage passed for {db_path}."
+    return f"Temporary SQLite FTS5 storage passed for {db_path}."
 
 
-def _check_embedding(model: str, url: str, timeout: int) -> str:
+def _check_embedding(model: str, url: str, timeout: int, db_path: Path) -> str:
+    from vectorizer.chroma_client import open_chroma
     from vectorizer.embeddings import create_embeddings, embed_documents_with_retry
 
     embedder = create_embeddings(model, url, timeout_seconds=timeout)
     vectors = embed_documents_with_retry(embedder, ["GeorgeGPT indexing preflight."], attempts=1)
     if len(vectors) != 1 or not vectors[0] or not all(math.isfinite(value) for value in vectors[0]):
         raise ValueError("Ollama did not return one finite, nonempty embedding.")
-    return f"{model} returned a {len(vectors[0])}-dimensional embedding."
+    with closing(open_chroma(db_path, create=True)) as client:
+        name = f"preflight-{uuid4().hex}"
+        probe = client.create_collection(name=name, embedding_function=None)
+        try:
+            ids = [f"probe-{i}" for i in range(32)]
+            probe.upsert(ids=ids, embeddings=vectors * len(ids), documents=["Setup preflight"] * len(ids),
+                         metadatas=[{"preflight": True}] * len(ids))
+            if probe.count() != len(ids) or not probe.query(query_embeddings=vectors, n_results=1)["ids"][0]:
+                raise RuntimeError("The Chroma batch probe could not count or retrieve the test vectors.")
+        finally:
+            client.delete_collection(name=name)
+    return f"{model}: Chroma HTTP write, count and query passed with 32 vectors of dimension {len(vectors[0])}."
 
 
 def main() -> int:
@@ -80,8 +89,8 @@ def main() -> int:
     checks = (
         ("Repository", lambda: _check_sources(args.repository.resolve())),
         ("Index storage", lambda: _check_storage(args.db_path.resolve(), args.collection)),
-        (f"Ollama embedding at {args.ollama_url}",
-         lambda: _check_embedding(args.embedding_model, args.ollama_url, args.timeout)),
+        (f"Ollama embedding at {args.ollama_url} and Chroma HTTP batch",
+         lambda: _check_embedding(args.embedding_model, args.ollama_url, args.timeout, args.db_path.resolve())),
     )
     failures = 0
     for label, check in checks:

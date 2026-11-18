@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 
 from common.sqlite_paths import read_only_sqlite_uri
+from common.chroma_endpoint import chroma_port
 
 CREATE_SCHEMA = (
     "CREATE VIRTUAL TABLE chunks USING fts5("
@@ -20,7 +21,7 @@ INSERT_ROW = "INSERT INTO chunks VALUES(?,?,?,?,?,?,?,?)"
 
 def bm25_path(db_path: Path, collection: str) -> Path:
     """Return the collection-specific SQLite FTS5 path without accessing disk."""
-    return db_path / f"{collection}.bm25.sqlite3"
+    return db_path / f"{collection}.http-{chroma_port()}.bm25.sqlite3"
 
 
 def document_rows(documents: Iterable[dict], *, repository: str = "unknown", source_fallback: bool = True):

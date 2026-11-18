@@ -15,9 +15,31 @@ from common.runtime_defaults import index_collection, index_db_path, ollama_base
 from evaluation.artifacts import read_questions, save_report
 from Interface.server import ServerConfig, create_app
 from services import index_preflight
+from vectorizer.chroma_client import open_chroma, server_database_name
 
 
 class RuntimeRefactorTests(unittest.TestCase):
+    def test_chroma_uses_http_and_isolates_index_paths(self):
+        path = Path("http-index")
+        self.assertEqual(server_database_name(path), server_database_name(path.resolve()))
+        self.assertNotEqual(server_database_name(path), server_database_name(path / "other"))
+        with (
+            patch("vectorizer.chroma_client.getproxies", return_value={}),
+            patch("vectorizer.chroma_client.chroma_port", return_value=8010),
+            patch("vectorizer.chroma_client.check_chroma_server") as check,
+            patch("vectorizer.chroma_client.chroma_request"),
+            patch("vectorizer.chroma_client.chromadb.HttpClient") as client,
+            patch("vectorizer.chroma_client.chromadb.PersistentClient", side_effect=AssertionError("embedded")),
+        ):
+            self.assertIs(open_chroma(path), client.return_value)
+            client.assert_called_once_with(host="127.0.0.1", port=8010, database=server_database_name(path),
+                                           headers={"Connection": "close"})
+            client.reset_mock()
+            check.side_effect = RuntimeError("Chroma offline")
+            with self.assertRaisesRegex(RuntimeError, "Chroma offline"):
+                open_chroma(path)
+            client.assert_not_called()
+
     def test_preflight_prints_each_failure_and_checks_remaining_stages(self):
         args = ["index_preflight", ".", ".", "repo_documents", "missing-model", "http://localhost:11434", "3"]
         output, errors = StringIO(), StringIO()

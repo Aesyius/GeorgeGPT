@@ -28,7 +28,7 @@ evaluation commands, unless stated otherwise.
 
 | Flag | Default / source | Purpose |
 | --- | --- | --- |
-| `--db-path PATH` | `RAG_DB_PATH`, otherwise project-root `chroma_db` | Persistent index directory; explicit relative paths resolve from the current directory. |
+| `--db-path PATH` | `RAG_DB_PATH`, otherwise project-root `chroma_db` | Local BM25 directory and Chroma server namespace key; relative paths resolve from the current directory. |
 | `--collection NAME` | `RAG_COLLECTION`, otherwise `repo_documents` | Base collection/catalog; repository workflows resolve the embedding-model-specific index. |
 | `--embedding-model NAME` | Configured model, with environment overrides | Exact Ollama embedding tag; must match the indexed vectors. |
 | `--ollama-url URL` | `OLLAMA_BASE_URL`, otherwise `http://localhost:11434` | Ollama endpoint. Not accepted or required by `verify_index`. |
@@ -275,12 +275,20 @@ Ollama must be running; API/WebUI ports must be free.
 It launches API/WebUI and waits for connection saving. Leaving or interrupting
 setup does not shut down launched services.
 
+### services.chroma_server
+
+Run `python -m services.chroma_server install` from the runtime environment to
+install and start the pinned server in WSL2. Use `start` to reuse or start an
+already installed server. Both accept an optional positional log path.
+Configure the distro with `RAG_CHROMA_WSL_DISTRO` (default `Ubuntu`) and the
+loopback port with `RAG_CHROMA_PORT` (default `8010`).
+
 ### services.index_preflight
 
 Setup runs this check before `vectorizer.vectorize`. It reports unreadable or
-empty source files, tests Chroma and SQLite FTS5 in temporary storage, and sends
-one test embedding to Ollama. The existing index is not opened. A failed check
-prints `[PREFLIGHT ERROR]` and returns exit code 1.
+empty source files, tests temporary SQLite FTS5 storage, and uses one Ollama
+embedding to test a 32-vector Chroma HTTP write, count, and query in a disposable
+collection. A failed check prints `[PREFLIGHT ERROR]` and returns exit code 1.
 
 ```powershell
 .\.venv\Scripts\python.exe -m services.index_preflight "C:\Repos\MyProject" ".\chroma_db" repo_documents qwen3-embedding:4B http://127.0.0.1:11434 120

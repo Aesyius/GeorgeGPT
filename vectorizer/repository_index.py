@@ -8,7 +8,7 @@ from contextlib import closing
 from pathlib import Path
 import subprocess
 
-import chromadb
+from .chroma_client import open_chroma
 
 from .embeddings import DEFAULT_EMBEDDING_TIMEOUT, create_embeddings, validate_embedding_timeout
 from .chunking import (CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, DEFAULT_EMBEDDING_BYTES,
@@ -146,8 +146,9 @@ def index_repository(
         raise ValueError(f"No nonempty source chunks found under {root}; the existing index was not modified.")
 
     keyword_path = _bm25_path(db_dir, collection_name)
-    with closing(chromadb.PersistentClient(path=str(db_dir))) as client:
-        collection = client.get_or_create_collection(name=collection_name, metadata={"hnsw:space": "cosine"})
+    with closing(open_chroma(db_dir, create=True)) as client:
+        collection = client.get_or_create_collection(name=collection_name, embedding_function=None,
+                                                     metadata={"hnsw:space": "cosine"})
         previous_model = collection_embedding_model(collection)
         if previous_model is not None and previous_model != embedding_model:
             raise ValueError(f"Collection {collection_name!r} uses {previous_model}, not {embedding_model}. "

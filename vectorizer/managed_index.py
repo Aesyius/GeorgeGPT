@@ -7,12 +7,13 @@ import logging
 from pathlib import Path
 import sqlite3
 
-import chromadb
 from chromadb.errors import NotFoundError
 
 from common.model_config import ModelSettings
 from common.paths import resolve_path, configured_repository
+from common.chroma_endpoint import chroma_port
 from common.runtime_defaults import index_collection, index_db_path, ollama_base_url
+from .chroma_client import open_chroma
 from .keyword_index import bm25_path
 from .index_catalog import manifest_mapping, register_collection, snapshot_generation
 # Preserve imports used by existing CLI callers while keeping lookup independent
@@ -80,7 +81,7 @@ def _publish_ready(client, base_name: str, name: str, model: str, expected: dict
 @contextmanager
 def _preparation_lock(db_path: Path):
     # SQLite releases the cross-process lock even if a builder crashes.
-    with closing(sqlite3.connect(db_path / "managed-index-lock.sqlite3", timeout=86400)) as lock:
+    with closing(sqlite3.connect(db_path / f"managed-index-http-{chroma_port()}.sqlite3", timeout=86400)) as lock:
         lock.execute("BEGIN IMMEDIATE")
         yield
 
@@ -110,7 +111,7 @@ def prepare_index(db_path: str | Path, base_collection: str, embedding_model: st
     db_path = resolve_path(db_path)
     db_path.mkdir(parents=True, exist_ok=True)
     with _preparation_lock(db_path):
-        with closing(chromadb.PersistentClient(path=str(db_path))) as client:
+        with closing(open_chroma(db_path, create=True)) as client:
             base = _collection(client, base_collection)
             metadata = (base.metadata or {}) if base is not None else {}
             sources = _sources(metadata, repository)
@@ -126,7 +127,7 @@ def prepare_index(db_path: str | Path, base_collection: str, embedding_model: st
             name, expected = _build_target(base_collection, candidate_name, candidate_metadata,
                                            metadata, embedding_model, sources)
             collection = client.get_or_create_collection(
-                name=name, metadata={"hnsw:space": "cosine", "managed_ready": False})
+                name=name, embedding_function=None, metadata={"hnsw:space": "cosine", "managed_ready": False})
             actual = collection.metadata or {}
             if (all(actual.get(key) == value for key, value in expected.items())
                     and collection.count() > 0 and bm25_path(db_path, name).is_file()):

@@ -5,10 +5,9 @@ import hashlib
 import json
 from pathlib import Path
 
-import chromadb
 from chromadb.errors import NotFoundError
 
-from common.paths import resolve_path
+from .chroma_client import open_chroma
 from .vector_store import collection_embedding_model, source_generation, update_collection_metadata
 
 
@@ -62,7 +61,7 @@ def select_index_collection(db_path: str | Path, base_collection: str, embedding
     name. Opens persistent Chroma to inspect bounded ownership/catalog metadata;
     callers must build and register the chosen index separately.
     """
-    with closing(chromadb.PersistentClient(path=str(resolve_path(db_path)))) as client:
+    with closing(open_chroma(db_path, create=True)) as client:
         try:
             base = client.get_collection(name=base_collection)
         except NotFoundError:
@@ -88,7 +87,7 @@ def register_collection(client, base_collection: str, collection_name: str, embe
     sources = manifest_mapping(metadata, "index_sources")
     if not metadata.get("index_ready") or not sources:
         return
-    base = client.get_or_create_collection(name=base_collection)
+    base = client.get_or_create_collection(name=base_collection, embedding_function=None)
     base_metadata = base.metadata or {}
     publication = catalog_publication(base_metadata, sources, manifest_mapping(metadata, "source_versions"))
     # Older completed indexes have no content fingerprints. Retain their snapshot
@@ -110,7 +109,7 @@ def register_index(db_path: str | Path, base_collection: str, collection_name: s
 
     The target collection must already exist; no embedding or index build occurs.
     """
-    with closing(chromadb.PersistentClient(path=str(resolve_path(db_path)))) as client:
+    with closing(open_chroma(db_path)) as client:
         register_collection(client, base_collection, collection_name, embedding_model)
 
 
@@ -123,7 +122,7 @@ def matching_index(db_path: str | Path, base_collection: str, embedding_model: s
     Legacy collections without full manifests retain compatibility behavior.
     Does not create a prepared index or repair mismatches.
     """
-    with closing(chromadb.PersistentClient(path=str(resolve_path(db_path)))) as client:
+    with closing(open_chroma(db_path)) as client:
         base = client.get_collection(name=base_collection)
         base_metadata = base.metadata or {}
         name = manifest_mapping(base_metadata, "model_indexes").get(embedding_model, base_collection)

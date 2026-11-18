@@ -10,7 +10,8 @@ from concurrent.futures import Future
 from concurrent.futures.process import BrokenProcessPool
 from unittest.mock import Mock, call, patch
 
-import chromadb
+from vectorizer.chroma_client import open_chroma
+from vectorizer.keyword_index import bm25_path
 from httpx import ReadTimeout
 
 from vectorizer.chunk_workers import iter_prepared_files, validate_chunk_workers
@@ -121,7 +122,7 @@ class ChunkWorkersTest(unittest.TestCase):
     def test_worker_error_stops_before_storage(self):
         (self.root / "d.txt").unlink()
         (self.root / "e.md").write_text("# " + "x" * 600, encoding="utf-8")
-        with patch("vectorizer.repository_index.chromadb.PersistentClient") as client:
+        with patch("vectorizer.repository_index.open_chroma") as client:
             with self.assertRaisesRegex(ValueError, "While chunking e.md:"):
                 index_repository(self.root, db_path=self.db_path, chunk_workers=2, max_embedding_bytes=512,
                                  progress=Mock())
@@ -135,6 +136,7 @@ class ChunkWorkersTest(unittest.TestCase):
                 list(self.prepare(discover_files(self.root), 2))
             executor.shutdown.assert_called_once_with(wait=True, cancel_futures=True)
 
+    @unittest.skipUnless(os.getenv("GEORGEGPT_TEST_CHROMA"), "requires a disposable Chroma HTTP server")
     def test_index_reuses_vectors_when_worker_count_changes(self):
         self.db_path = self.db_path.with_name("db # literal %20 café")
         (self.root / "d.txt").unlink()
@@ -172,6 +174,7 @@ class ChunkWorkersTest(unittest.TestCase):
                 hits = retriever._keyword_search("Example", 5)
                 self.assertEqual([hit["metadata"]["path"] for hit in hits], ["a.py"])
 
+    @unittest.skipUnless(os.getenv("GEORGEGPT_TEST_CHROMA"), "requires a disposable Chroma HTTP server")
     def test_unreadable_reindex_preserves_previous_index(self):
         (self.root / "d.txt").unlink()
         embedder = Mock()
@@ -180,7 +183,7 @@ class ChunkWorkersTest(unittest.TestCase):
         with patch("vectorizer.repository_index.create_embeddings", return_value=embedder):
             index_repository(self.root, **options)
             before = self.snapshot()
-            keyword = self.db_path / "repo_documents.bm25.sqlite3"
+            keyword = bm25_path(self.db_path, "repo_documents")
             before_keyword = keyword.read_bytes()
             (self.root / "a.py").write_bytes(b"\xff")
             embedder.reset_mock()
@@ -198,6 +201,7 @@ class ChunkWorkersTest(unittest.TestCase):
             index_repository(self.root, db_path=self.db_path, progress=Mock())
         self.assertFalse(self.db_path.exists())
 
+    @unittest.skipUnless(os.getenv("GEORGEGPT_TEST_CHROMA"), "requires a disposable Chroma HTTP server")
     def test_single_file_rejects_repository_collection_but_allows_separate_collection(self):
         (self.root / "d.txt").unlink()
         embedder = Mock()
@@ -215,6 +219,6 @@ class ChunkWorkersTest(unittest.TestCase):
         self.assertEqual(matching_index(self.db_path, "repo_documents", "test-model"), "repo_documents")
 
     def snapshot(self):
-        with closing(chromadb.PersistentClient(path=str(self.db_path))) as client:
+        with closing(open_chroma(self.db_path)) as client:
             collection = client.get_collection("repo_documents")
             return collection.metadata, collection.get(include=["documents", "metadatas"])

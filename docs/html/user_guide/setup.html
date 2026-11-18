@@ -98,7 +98,7 @@ interface, and ask your first question.</p>
 </blockquote>
 
 <p><strong>You need:</strong> Windows 10/11 (64-bit), PowerShell 5.1 or newer, internet for the
-initial downloads, and a local repository to search.</p>
+initial downloads, an initialized WSL2 distribution, and a local repository to search.</p>
 
 <p><strong>Path examples:</strong> <code>C:\Projects\GeorgeGPT</code> is the application folder.
 <code>C:\Repos\MyProject</code> is the repository you want to ask questions about.
@@ -119,6 +119,14 @@ Replace both with your real paths and quote paths containing spaces.</p>
 <p><strong>Before continuing:</strong> the command should report Python 3.12. If it is missing,
 try <code>python --version</code>. If Python 3.12 is installed but isn't discoverable,
 pass <code>-PythonPath "C:\Path\To\python.exe"</code> to <code>setup.ps1</code>.</p>
+
+<ol start="3">
+<li>Install Ubuntu with <code>wsl --install -d Ubuntu</code> and initialize its Linux user.
+Install the prerequisites inside Ubuntu with <code>sudo apt-get update</code> followed by
+<code>sudo apt-get install -y python3-venv util-linux</code>. Set <code>RAG_CHROMA_WSL_DISTRO</code>
+in PowerShell if you use another WSL2 distribution. Setup starts ChromaDB
+inside WSL2 and connects to it over Windows localhost.</li>
+</ol>
 
 <p><strong>Disk space:</strong> budget approximately <strong>15–20 GB for the completed installation</strong>
 with the default <code>qwen3.5:9b</code> chat model, <code>qwen3-embedding:4B</code> embedding model,

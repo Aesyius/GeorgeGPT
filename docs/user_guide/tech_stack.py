@@ -114,8 +114,9 @@ By default, retrieval selects up to **eight passages** within a character
 budget. Their text and source metadata are supplied as evidence, rather than
 sending the whole repository to the model.
 
-Chroma and collection-specific keyword databases persist under project-root
-`chroma_db/`. Model catalogs track compatible indexes. The explicit verification
+Chroma stores vectors in WSL2 and serves the Windows client over localhost.
+Collection-specific keyword databases persist under project-root
+`chroma_db/` under port-specific filenames. Model catalogs track compatible indexes. The explicit verification
 command audits stored vectors, chunk metadata, and keyword consistency; it
 does not measure whether answers are correct.
 

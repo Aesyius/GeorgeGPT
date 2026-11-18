@@ -140,7 +140,9 @@ Remove-Item Env:RAG_REPOSITORY_PATH
 | Variable | Purpose / default |
 | --- | --- |
 | `RAG_REPOSITORY_PATH` | Temporary repository override before configured `repository_path`. |
-| `RAG_DB_PATH` | Alternate index directory; default project-root `chroma_db`. |
+| `RAG_DB_PATH` | Local BM25 directory and Chroma server namespace key; default project-root `chroma_db`. |
+| `RAG_CHROMA_PORT` | Chroma loopback port on Windows and in WSL2 (default `8010`). |
+| `RAG_CHROMA_WSL_DISTRO` | Initialized WSL2 distribution (default `Ubuntu`). |
 | `RAG_COLLECTION` | Base collection/catalog; default `repo_documents`. |
 | `RAG_BOOTUP_CONFIG` | Bootup JSON used by standalone repository resolution; default project `config/bootup.json`. |
 | `RAG_MODEL_CONFIG` | Standalone model JSON; default project `config/models.json`. |
@@ -163,7 +165,7 @@ Investigate the environment rather than deleting or resetting existing data.
 
 ## Persistence and credentials
 
-`chroma_db/` contains persistent Chroma and SQLite keyword indexes, including
+`chroma_db/` contains local SQLite keyword indexes, including
 model-specific indexes/catalog metadata. WebUI accounts, saved connections,
 and signing keys are separate. Preserve these directories and runtime logs.
 Do not switch embedders inside a single-file collection; choose another name.

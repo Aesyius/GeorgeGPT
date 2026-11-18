@@ -8,7 +8,9 @@ from contextlib import closing
 import hashlib
 from pathlib import Path
 
-import chromadb
+from chromadb.errors import ChromaError
+from httpx import HTTPError
+from .chroma_client import open_chroma
 
 from .chunking import DEFAULT_EMBEDDING_BYTES, embedding_metadata
 from .chunk_workers import MAX_CHUNK_WORKERS, validate_chunk_workers
@@ -64,8 +66,9 @@ def index_file(source: Path, db_path: Path, collection_name: str, embedding_mode
                     "chunk_index": index, "start_index": chunk["start_index"],
                     **embedding_metadata(chunk, embedding_model, max_embedding_bytes)}
         prepared.append({"id": ident, "text": chunk["text"], "metadata": metadata})
-    with closing(chromadb.PersistentClient(path=str(db_path))) as client:
-        collection = client.get_or_create_collection(name=collection_name, metadata={"hnsw:space": "cosine"})
+    with closing(open_chroma(db_path, create=True)) as client:
+        collection = client.get_or_create_collection(name=collection_name, embedding_function=None,
+                                                     metadata={"hnsw:space": "cosine"})
         metadata = collection.metadata or {}
         if any(key in metadata for key in ("index_sources", "catalog_sources", "model_indexes", "managed_identity")):
             raise ValueError(f"Collection {collection_name!r} is a repository index or catalog. "
@@ -104,7 +107,7 @@ def main() -> None:
     parser.add_argument("path", nargs="?", type=resolve_path, default=None,
                          help="repository directory or UTF-8 file (default: configured repository_path)")
     parser.add_argument("--db-path", type=resolve_path, default=index_db_path(),
-                        help="Chroma directory (default: project-root chroma_db)")
+                        help="local BM25 directory and Chroma namespace key (default: project-root chroma_db)")
     parser.add_argument("--collection", default=index_collection())
     parser.add_argument("--embedding-model", default=None,
                         help="override the embedding model selected by config/models.json (or RAG_MODEL_CONFIG)")
@@ -151,7 +154,7 @@ def main() -> None:
             print(f"Indexed {count} chunks from {args.path} into '{args.collection}'.")
         else:
             parser.error(f"not a repository or file: {args.path}")
-    except (OSError, UnicodeError, ValueError, RuntimeError) as error:
+    except (OSError, ValueError, RuntimeError, ChromaError, HTTPError) as error:
         parser.exit(1, f"Indexing failed: {type(error).__name__}: {error}\n")
 
 

@@ -245,6 +245,11 @@ try {
         Invoke-Checked $web @('-m', 'pip', 'install', '--upgrade', 'pip') -Quiet
         Write-Host ''
         Write-SetupStatus 'Installing GeorgeGPT dependencies from requirements.txt...'
+        # The full and thin Chroma distributions install the same module.
+        $legacyChroma = Invoke-Checked $python @('-c', "from importlib.metadata import packages_distributions; print(int('chromadb' in packages_distributions().get('chromadb', [])))")
+        if ($legacyChroma -eq '1') {
+            throw 'The existing .venv contains embedded Chroma. Use a clean checkout of Chroma-Server-Mode or move .venv aside and rerun setup. The HTTP client cannot share that environment with the embedded package.'
+        }
         Invoke-Checked $python @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'requirements.txt')) -Quiet
         Write-Host ''
         Write-SetupStatus 'Installing Open WebUI dependencies from requirements-webui.txt...'
@@ -290,6 +295,7 @@ try {
         Write-SetupStep 4
         Write-Host "Repository: $repository"
         Write-Host "Embedding model: $($models.embedding_model)"
+        Invoke-Checked $python @('-u', '-m', 'services.chroma_server', 'install', (Join-Path $logsDirectory 'chroma.log'))
         try {
             Invoke-Checked $python @('-u', '-m', 'services.index_preflight', $repository, $database,
                                      $collection, $models.embedding_model, $ollamaUrl, $EmbeddingTimeoutSeconds)

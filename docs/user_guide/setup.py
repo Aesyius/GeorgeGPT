@@ -9,7 +9,7 @@ interface, and ask your first question.
 > Large model downloads or repositories may take longer.
 
 **You need:** Windows 10/11 (64-bit), PowerShell 5.1 or newer, internet for the
-initial downloads, and a local repository to search.
+initial downloads, an initialized WSL2 distribution, and a local repository to search.
 
 **Path examples:** `C:\Projects\GeorgeGPT` is the application folder.
 `C:\Repos\MyProject` is the repository you want to ask questions about.
@@ -27,6 +27,12 @@ py -3.12 --version
 **Before continuing:** the command should report Python 3.12. If it is missing,
 try `python --version`. If Python 3.12 is installed but isn't discoverable,
 pass `-PythonPath "C:\Path\To\python.exe"` to `setup.ps1`.
+
+3. Install Ubuntu with `wsl --install -d Ubuntu` and initialize its Linux user.
+   Install the prerequisites inside Ubuntu with `sudo apt-get update` followed by
+   `sudo apt-get install -y python3-venv util-linux`. Set `RAG_CHROMA_WSL_DISTRO`
+   in PowerShell if you use another WSL2 distribution. Setup starts ChromaDB
+   inside WSL2 and connects to it over Windows localhost.
 
 **Disk space:** budget approximately **15–20 GB for the completed installation**
 with the default `qwen3.5:9b` chat model, `qwen3-embedding:4B` embedding model,

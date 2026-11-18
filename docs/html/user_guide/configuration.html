@@ -369,7 +369,15 @@ children; they are not saved to JSON. Remove a temporary override afterward:</p>
 </tr>
 <tr>
   <td><code>RAG_DB_PATH</code></td>
-  <td>Alternate index directory; default project-root <code>chroma_db</code>.</td>
+  <td>Local BM25 directory and Chroma server namespace key; default project-root <code>chroma_db</code>.</td>
+</tr>
+<tr>
+  <td><code>RAG_CHROMA_PORT</code></td>
+  <td>Chroma loopback port on Windows and in WSL2 (default <code>8010</code>).</td>
+</tr>
+<tr>
+  <td><code>RAG_CHROMA_WSL_DISTRO</code></td>
+  <td>Initialized WSL2 distribution (default <code>Ubuntu</code>).</td>
 </tr>
 <tr>
   <td><code>RAG_COLLECTION</code></td>
@@ -425,7 +433,7 @@ Investigate the environment rather than deleting or resetting existing data.</p>
 
 <h2 id="persistence-and-credentials">Persistence and credentials</h2>
 
-<p><code>chroma_db/</code> contains persistent Chroma and SQLite keyword indexes, including
+<p><code>chroma_db/</code> contains local SQLite keyword indexes, including
 model-specific indexes/catalog metadata. WebUI accounts, saved connections,
 and signing keys are separate. Preserve these directories and runtime logs.
 Do not switch embedders inside a single-file collection; choose another name.</p>

@@ -13,6 +13,7 @@ import sys
 import webbrowser
 
 from common.paths import PROJECT_ROOT, default_bootup_config
+from .chroma_server import ensure_chroma_server
 from .bootup import start_rag_api, start_webui
 from .model_warmup import warm_models
 from .service_config import BootError, StartupSettings, service_url
@@ -90,6 +91,7 @@ def bootstrap(config: dict, root: Path, *, open_browser: bool = True) -> None:
     back installed data or stop services that were already launched.
     """
     settings = StartupSettings.from_config(config, root)
+    ensure_chroma_server(settings.logs / "chroma.log")
     for section in ("rag_api", "open_webui"):
         if listener_pids(config[section]["port"]):
             raise BootError("API/WebUI ports are occupied. Stop the stack with python -m services.bootup kill, then retry.")

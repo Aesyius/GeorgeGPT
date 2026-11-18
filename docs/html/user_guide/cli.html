@@ -127,7 +127,7 @@ evaluation commands, unless stated otherwise.</p>
 <tr>
   <td><code>--db-path PATH</code></td>
   <td><code>RAG_DB_PATH</code>, otherwise project-root <code>chroma_db</code></td>
-  <td>Persistent index directory; explicit relative paths resolve from the current directory.</td>
+  <td>Local BM25 directory and Chroma server namespace key; relative paths resolve from the current directory.</td>
 </tr>
 <tr>
   <td><code>--collection NAME</code></td>
@@ -648,12 +648,20 @@ Ollama must be running; API/WebUI ports must be free.</p>
 <p>It launches API/WebUI and waits for connection saving. Leaving or interrupting
 setup does not shut down launched services.</p>
 
+<h3 id="serviceschroma_server"><a href="../services/chroma_server.html">services.chroma_server</a></h3>
+
+<p>Run <code>python -m <a href="../services/chroma_server.html">services.chroma_server</a> install</code> from the runtime environment to
+install and start the pinned server in WSL2. Use <code>start</code> to reuse or start an
+already installed server. Both accept an optional positional log path.
+Configure the distro with <code>RAG_CHROMA_WSL_DISTRO</code> (default <code>Ubuntu</code>) and the
+loopback port with <code>RAG_CHROMA_PORT</code> (default <code>8010</code>).</p>
+
 <h3 id="servicesindex_preflight"><a href="../services/index_preflight.html">services.index_preflight</a></h3>
 
 <p>Setup runs this check before <code><a href="../vectorizer/vectorize.html">vectorizer.vectorize</a></code>. It reports unreadable or
-empty source files, tests Chroma and SQLite FTS5 in temporary storage, and sends
-one test embedding to Ollama. The existing index is not opened. A failed check
-prints <code>[PREFLIGHT ERROR]</code> and returns exit code 1.</p>
+empty source files, tests temporary SQLite FTS5 storage, and uses one Ollama
+embedding to test a 32-vector Chroma HTTP write, count, and query in a disposable
+collection. A failed check prints <code>[PREFLIGHT ERROR]</code> and returns exit code 1.</p>
 
 <div class="pdoc-code codehilite">
 <pre><span></span><code><span class="p">.\.</span><span class="n">venv</span><span class="p">\</span><span class="n">Scripts</span><span class="p">\</span><span class="n">python</span><span class="p">.</span><span class="n">exe</span> <span class="n">-m</span> <span class="n">services</span><span class="p">.</span><span class="n">index_preflight</span> <span class="s2">"C:\Repos\MyProject"</span> <span class="s2">".\chroma_db"</span> <span class="n">repo_documents</span> <span class="n">qwen3-embedding</span><span class="p">:</span><span class="n">4B</span> <span class="n">http</span><span class="p">://</span><span class="n">127</span><span class="p">.</span><span class="n">0</span><span class="p">.</span><span class="n">0</span><span class="p">.</span><span class="n">1</span><span class="p">:</span><span class="n">11434</span> <span class="n">120</span>

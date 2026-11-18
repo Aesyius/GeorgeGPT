@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import sqlite3
 
-import chromadb
+from .chroma_client import open_chroma
 
 from .embeddings import create_embeddings
 from common.model_config import resolve_embedding_model
@@ -52,7 +52,7 @@ class Retriever:
         options = {} if keep_alive_seconds is None else {"keep_alive_seconds": keep_alive_seconds}
         self._embedder = create_embeddings(embedding_model, ollama_url, **options)
         self._bm25 = _bm25_path(self.db_path, collection_name)
-        self._client = chromadb.PersistentClient(path=str(self.db_path))
+        self._client = open_chroma(self.db_path)
         try:
             self._collection = self._client.get_collection(name=collection_name)
         except BaseException:
@@ -60,7 +60,7 @@ class Retriever:
             raise
 
     def close(self) -> None:
-        """Release this retriever's persistent Chroma client."""
+        """Release this retriever's Chroma HTTP client."""
         self._client.close()
 
     def _keyword_search(self, question: str, limit: int) -> list[dict]:

@@ -40,6 +40,16 @@ On **Windows 10/11 (64-bit)** with **PowerShell 5.1 or newer**, install:
   For a Python install not on `PATH`, pass `-PythonPath "C:\Path\To\python.exe"`.
 - **Ollama**. Setup looks at the configured executable, then `PATH`, then the
   standard per-user install location.
+- **WSL2 with Ubuntu** (or set `RAG_CHROMA_WSL_DISTRO` to an initialized WSL2
+  distro with Python 3 and `venv`). Install Ubuntu using `wsl --install -d Ubuntu`,
+  initialize its Linux user, then run `wsl -d Ubuntu -- sudo apt-get update` and
+  `wsl -d Ubuntu -- sudo apt-get install -y python3-venv util-linux`.
+
+This branch uses **ChromaDB over HTTP only**. Setup installs the pinned Chroma
+server in WSL2 and starts it at `127.0.0.1:8010` (no firewall rules or forwarding
+scripts). For an existing embedded installation, use a clean checkout or move
+`.venv` aside before running setup: `chromadb` and `chromadb-client` cannot
+share one environment. Do not copy the old index into WSL; setup builds a new one.
 
 If Ollama is missing, `setup.ps1` offers to run
 `irm https://ollama.com/install.ps1 | iex` after a **Y/N** consent prompt.
@@ -148,9 +158,10 @@ py -3.12 .\services\setup_check.py --config .\config\bootup.json --repository "C
 Setup displays timestamped stages, a steps-completed progress bar, and elapsed
 times. Detailed pip/Ollama output is saved to a unique `setup-*.log` under the
 configured log directory (normally `%LOCALAPPDATA%\Vectorizer\logs`).
-Before launching the vectorizer, setup checks source files, temporary Chroma/SQLite
-storage, and a live Ollama embedding. Fix any `[PREFLIGHT ERROR]` messages in the
-terminal before retrying. The preflight does not open the existing index.
+Before launching the vectorizer, setup checks source files and temporary SQLite
+storage. It gets the embedding dimension from Ollama, then writes 32 vectors
+over HTTP to a disposable Chroma collection, counts them, and queries one.
+Fix any `[PREFLIGHT ERROR]` messages in the terminal before retrying.
 Other failures show recent command output and the log location. Indexing progress
 and WebUI connection prompts remain visible. `-WhatIf` creates no setup log.
 
@@ -178,6 +189,7 @@ First copy `config/bootup.json` to `config/bootup.local.json`, set `repository_p
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m services.chroma_server install
 py -3.12 -m venv .venv-webui
 .\.venv-webui\Scripts\python.exe -m pip install -r requirements-webui.txt
 
@@ -283,13 +295,20 @@ Logs default to **`%LOCALAPPDATA%\Vectorizer\logs`**:
 | `rag-api.log` | API requests and errors |
 | `open-webui.log` | WebUI output |
 
-If preparation fails, startup stops rather than serving mismatched vectors. Review the log and retry; compatible completed embedding batches can be reused. Index data persists under project-root **`chroma_db/`** by default.
+If preparation fails, startup stops rather than serving mismatched vectors. Review
+`chroma.log` and `index-preparation.log` and retry. Vectors persist in WSL under
+`~/.local/share/georgegpt-chroma/data-8010/`; local BM25 and coordination files
+default to `chroma_db/` under new, port-specific filenames; old embedded files
+are not opened. `services.bootup kill` leaves Chroma running
+because it may serve more than one checkout.
 
 <details>
 <summary>Advanced configuration and overrides</summary>
 
 - `RAG_REPOSITORY_PATH`: temporary repository override.
-- `RAG_DB_PATH`: alternate database directory.
+- `RAG_DB_PATH`: alternate local BM25/coordination directory and server namespace key. Keep the absolute path consistent across index, verify, and query.
+- `RAG_CHROMA_PORT`: Windows/WSL loopback Chroma port (default `8010`). It must not match another service port. A different port selects separate WSL storage.
+- `RAG_CHROMA_WSL_DISTRO`: WSL2 distro (default `Ubuntu`). Standalone commands require an already running server; use `python -m services.chroma_server start`.
 - `RAG_COLLECTION`: base collection/catalog name; commands resolve its model-specific index.
 - `RAG_BOOTUP_CONFIG`: alternate bootup JSON for standalone commands. Use `services.bootup --config PATH` for stack startup.
 - `RAG_MODEL_CONFIG`: alternate model JSON for standalone commands.
