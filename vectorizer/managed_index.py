@@ -4,7 +4,6 @@ from contextlib import closing, contextmanager
 import hashlib
 import json
 import logging
-import os
 from pathlib import Path
 import sqlite3
 
@@ -12,7 +11,8 @@ import chromadb
 from chromadb.errors import NotFoundError
 
 from common.model_config import ModelSettings
-from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
+from common.paths import resolve_path, configured_repository
+from common.runtime_defaults import index_collection, index_db_path, ollama_base_url
 from .keyword_index import bm25_path
 from .index_catalog import manifest_mapping, register_collection, snapshot_generation
 # Preserve imports used by existing CLI callers while keeping lookup independent
@@ -161,10 +161,8 @@ def main() -> None:
     """
     logging.basicConfig(level=logging.INFO)
     settings = ModelSettings.from_env()
-    prepare_index(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH)),
-                  os.getenv("RAG_COLLECTION", "repo_documents"), settings.embedding_model,
-                  os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-                  configured_repository())
+    prepare_index(index_db_path(), index_collection(), settings.embedding_model,
+                  ollama_base_url(), configured_repository())
 
 
 if __name__ == "__main__":

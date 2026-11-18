@@ -142,7 +142,7 @@ neither reads files nor creates vectors.</p>
   selected collection, and keyword-index path.</p>
 </blockquote>
 
-<p>Discovers eligible files, skips unreadable/undecodable text, reuses compatible
+<p>Rejects unreadable/undecodable eligible files before writing, reuses compatible
 vectors, embeds changed chunks, removes stale source chunks, and replaces
 this repository's keyword rows. Readiness metadata is published after both
 stores succeed. This is not a cross-store transaction: failed runs may retain

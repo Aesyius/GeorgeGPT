@@ -4,50 +4,16 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 import json
-import os
-from pathlib import Path
-import tempfile
 
 from Interface.chat import answer_question
 from common.model_config import resolve_model_names
-from common.paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path, configured_repository
+from common.paths import PROJECT_ROOT, resolve_path, configured_repository
+from common.runtime_defaults import index_collection, index_db_path, ollama_base_url
 from vectorizer.retrieval import Retriever
-
-
-def _read_questions(path: Path) -> list[dict]:
-    questions = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if not line.strip():
-            continue
-        try:
-            item = json.loads(line)
-        except json.JSONDecodeError as error:
-            raise ValueError(f"invalid JSONL at {path}:{number}: {error}") from error
-        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not isinstance(item.get("question"), str):
-            raise ValueError(f"expected an object with string id/question at {path}:{number}")
-        questions.append(item)
-    if not questions:
-        raise ValueError(f"no questions found in {path}")
-    if len({item["id"] for item in questions}) != len(questions):
-        raise ValueError(f"question IDs must be unique in {path}")
-    return questions
-
-
-def _save_atomic(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=path.stem + "_", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(data, stream, ensure_ascii=False, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temp_name, path)
-    finally:
-        if os.path.exists(temp_name):
-            os.unlink(temp_name)
+from .artifacts import read_questions, save_report
 
 
 def main() -> None:
@@ -68,11 +34,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--questions", type=resolve_path, default=root / "sample_questions" / "fak_questions.jsonl")
     parser.add_argument("--output", type=resolve_path, default=root / "sample_questions" / "fak_answers.json")
-    parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))))
-    parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))
+    parser.add_argument("--db-path", type=resolve_path, default=index_db_path())
+    parser.add_argument("--collection", default=index_collection())
     parser.add_argument("--embedding-model", default=None)
     parser.add_argument("--chat-model", default=None)
-    parser.add_argument("--ollama-url", default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
+    parser.add_argument("--ollama-url", default=ollama_base_url())
     parser.add_argument("--top-k", type=int, default=8)
     args = parser.parse_args()
     if args.top_k < 1:
@@ -80,7 +46,7 @@ def main() -> None:
 
     try:
         args.chat_model, args.embedding_model = resolve_model_names(args.chat_model, args.embedding_model)
-        questions = _read_questions(args.questions)
+        questions = read_questions(args.questions)
         existing = {}
         if args.output.exists():
             previous = json.loads(args.output.read_text(encoding="utf-8"))
@@ -93,7 +59,7 @@ def main() -> None:
                 parser.error(f"existing answer file uses different models; choose a new --output: {args.output}")
             existing = {item["id"]: item for item in previous.get("answers", [])
                         if item.get("status") == "answered"}
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError) as error:
         parser.error(str(error))
 
     base = {
@@ -110,7 +76,7 @@ def main() -> None:
     retriever = Retriever(db_path=args.db_path, collection_name=args.collection,
                           embedding_model=args.embedding_model, ollama_url=args.ollama_url,
                           top_k=args.top_k)
-    try:
+    with closing(retriever):
         for index, question in enumerate(questions, 1):
             if question["id"] in existing:
                 result = existing[question["id"]]
@@ -128,12 +94,10 @@ def main() -> None:
                 print(f"[{index}/{len(questions)}] {question['id']}: {result['status']}", flush=True)
             base["answers"].append(result)
             base["complete"] = False
-            _save_atomic(args.output, base)
-    finally:
-        retriever._client.close()
+            save_report(args.output, base)
     base["complete"] = len(base["answers"]) == len(questions) and all(
         item.get("status") == "answered" for item in base["answers"])
-    _save_atomic(args.output, base)
+    save_report(args.output, base)
     print(f"ANSWER_FILE={args.output}")
     print(f"COMPLETE={base['complete']} ANSWERS={len(base['answers'])} "
           f"ERRORS={sum(item.get('status') != 'answered' for item in base['answers'])}")

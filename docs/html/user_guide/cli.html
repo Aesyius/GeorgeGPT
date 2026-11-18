@@ -172,8 +172,13 @@ variables instead.</p>
 </tr>
 <tr>
   <td><code>-ConfigPath PATH</code></td>
-  <td>Project <code>config/bootup.json</code></td>
-  <td>Bootup configuration to use and update.</td>
+  <td>Local bootup config if present, otherwise the shared template</td>
+  <td>Bootup configuration to use; setup writes to the local copy when using the shared template.</td>
+</tr>
+<tr>
+  <td><code>-PythonPath PATH</code></td>
+  <td>Discover Python via the launcher or <code>PATH</code></td>
+  <td>Explicit path to a 64-bit Python 3.12 executable.</td>
 </tr>
 <tr>
   <td><code>-NoBrowser</code></td>

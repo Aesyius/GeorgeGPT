@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import os
+from contextlib import closing
 
-from .evaluate_questions import _read_questions, _save_atomic
+from .artifacts import read_questions, save_report
 from common.model_config import resolve_embedding_model
-from common.paths import DEFAULT_DB_PATH, PROJECT_ROOT, resolve_path
+from common.paths import PROJECT_ROOT, resolve_path
+from common.runtime_defaults import index_collection, index_db_path, ollama_base_url
 from vectorizer.retrieval import Retriever
 
 
@@ -58,10 +59,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--questions", type=resolve_path, default=PROJECT_ROOT / "sample_questions/fak_questions.jsonl")
     parser.add_argument("--output", type=resolve_path, required=True, help="new JSON output file; never reuses old results")
-    parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))))
-    parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))
+    parser.add_argument("--db-path", type=resolve_path, default=index_db_path())
+    parser.add_argument("--collection", default=index_collection())
     parser.add_argument("--embedding-model", default=None)
-    parser.add_argument("--ollama-url", default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
+    parser.add_argument("--ollama-url", default=ollama_base_url())
     parser.add_argument("--top-k", type=int, default=8)
     args = parser.parse_args()
     if args.top_k < 1:
@@ -70,16 +71,14 @@ def main() -> None:
         parser.error("output already exists; choose a new file for an independent experiment")
     try:
         args.embedding_model = resolve_embedding_model(args.embedding_model)
-        questions = _read_questions(args.questions)
+        questions = read_questions(args.questions)
         retriever = Retriever(db_path=args.db_path, collection_name=args.collection,
                               embedding_model=args.embedding_model, ollama_url=args.ollama_url, top_k=args.top_k)
-        try:
+        with closing(retriever):
             report = evaluate(questions, retriever)
-        finally:
-            retriever._client.close()
         report.update({"questions_file": str(args.questions), "db_path": str(args.db_path),
                        "collection": args.collection, "embedding_model": args.embedding_model, "top_k": args.top_k})
-        _save_atomic(args.output, report)
+        save_report(args.output, report)
     except (OSError, ValueError, RuntimeError) as error:
         parser.error(str(error))
     print(f"Path recall@{args.top_k}: {report['mean_path_recall_at_k']}")

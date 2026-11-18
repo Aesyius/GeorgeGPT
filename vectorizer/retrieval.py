@@ -11,6 +11,8 @@ import chromadb
 from .embeddings import create_embeddings
 from common.model_config import resolve_embedding_model
 from common.paths import DEFAULT_DB_PATH, resolve_path
+from common.runtime_defaults import DEFAULT_COLLECTION
+from common.sqlite_paths import read_only_sqlite_uri
 from .keyword_index import bm25_path as _bm25_path
 from .index_catalog import matching_index
 
@@ -21,7 +23,7 @@ class Retriever:
     def __init__(
         self,
         db_path: str | Path = DEFAULT_DB_PATH,
-        collection_name: str = "repo_documents",
+        collection_name: str = DEFAULT_COLLECTION,
         embedding_model: str | None = None,
         ollama_url: str | None = None,
         top_k: int = 8,
@@ -47,11 +49,19 @@ class Retriever:
         self.context_budget = context_budget
         self.embedding_model = embedding_model
         self.ollama_url = ollama_url
-        self._client = chromadb.PersistentClient(path=str(self.db_path))
-        self._collection = self._client.get_collection(name=collection_name)
         options = {} if keep_alive_seconds is None else {"keep_alive_seconds": keep_alive_seconds}
         self._embedder = create_embeddings(embedding_model, ollama_url, **options)
         self._bm25 = _bm25_path(self.db_path, collection_name)
+        self._client = chromadb.PersistentClient(path=str(self.db_path))
+        try:
+            self._collection = self._client.get_collection(name=collection_name)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        """Release this retriever's persistent Chroma client."""
+        self._client.close()
 
     def _keyword_search(self, question: str, limit: int) -> list[dict]:
         if not self._bm25.is_file():
@@ -63,7 +73,7 @@ class Retriever:
         query = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms[:32])
         db = None
         try:
-            db = sqlite3.connect(f"{self._bm25.as_uri()}?mode=ro", uri=True)
+            db = sqlite3.connect(read_only_sqlite_uri(self._bm25), uri=True)
             rows = db.execute(
                 "SELECT id, text, path, start_line, end_line, heading, revision, repository, bm25(chunks) AS rank "
                 "FROM chunks WHERE chunks MATCH ? ORDER BY rank LIMIT ?", (query, limit)

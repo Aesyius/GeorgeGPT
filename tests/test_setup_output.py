@@ -233,6 +233,39 @@ function Get-Command {{ throw 'Prerequisite probe during preview' }}
         self.assertFalse((project / "logs").exists())
         self.assertFalse((project / ".venv").exists())
 
+    def test_python_discovery_works_without_launcher_and_accepts_explicit_path(self):
+        self.run_ps(
+            """
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    (Join-Path $PWD 'setup.ps1'), [ref]$null, [ref]$null)
+$helper = $ast.Find({
+    param($n)
+    $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Find-SetupPython'
+}, $true)
+. ([scriptblock]::Create($helper.Extent.Text))
+function Get-Command {
+    param($Name, $CommandType, [switch]$All, $ErrorAction)
+    if ($Name -eq 'python.exe') { [pscustomobject]@{Source = $python} }
+}
+if ((Find-SetupPython) -ne $python) { throw 'Did not fall back to Python on PATH' }
+if ((Find-SetupPython $python) -ne $python) { throw 'Did not select explicit Python' }
+"""
+        )
+
+    def test_ollama_discovery_prefers_config_and_falls_back_to_path(self):
+        self.run_ps(
+            """
+$configured = Join-Path (Split-Path $fixture) 'configured ollama.exe'
+function Get-Command {
+    param($Name, $CommandType, [switch]$All, $ErrorAction)
+    if ($Name -eq 'ollama.exe') { [pscustomobject]@{Source = $python} }
+}
+if ((Find-SetupOllama $configured) -ne $python) { throw 'Did not fall back to Ollama on PATH' }
+New-Item -ItemType File -Path $configured | Out-Null
+if ((Find-SetupOllama $configured) -ne $configured) { throw 'Did not prefer configured Ollama' }
+"""
+        )
+
     def test_ollama_installation_requires_consent_and_restores_environment(self):
         output = self.run_ps(
             """
@@ -243,19 +276,16 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 $node = $ast.FindAll({
     param($n)
     $n -is [System.Management.Automation.Language.IfStatementAst] -and
-    $n.Extent.Text.StartsWith('if (-not (Test-Path -LiteralPath $ollama -PathType Leaf))')
+    $n.Extent.Text.StartsWith('if (-not $ollama)') -and
+    $n.Extent.Text.Contains('irm https://ollama.com/install.ps1 | iex')
 }, $true) | Select-Object -First 1
 $body = $node.Clauses[0].Item2.Extent.Text
 # Only replace the automatic ShouldProcess object with a consent test double.
 $block = [scriptblock]::Create($body.Substring(1, $body.Length - 2).Replace(
     '$PSCmdlet.ShouldProcess(', '$consent.ShouldProcess('))
-function Test-Path {
-    param($LiteralPath, $PathType)
-    return ($script:installed -and $LiteralPath -eq 'mock-ollama.exe')
-}
-function Get-Command {
-    param($Name, $ErrorAction)
-    if ($script:existing) { return [pscustomobject]@{Source = 'existing-ollama.exe'} }
+function Find-SetupOllama {
+    param($ConfiguredPath)
+    if ($script:installed) { return $ConfiguredPath }
 }
 function Read-Host {
     param($Prompt)
@@ -275,14 +305,12 @@ function Invoke-Expression {
 $consent = New-Object PSObject
 $consent | Add-Member ScriptMethod ShouldProcess { param($target, $action) return $script:approve }
 $config = @{ollama = @{host = '127.0.0.1'; port = 11434}}
-$ollama = 'mock-ollama.exe'
+$configuredOllama = 'mock-ollama.exe'
 $logsDirectory = 'unused-mock-directory'
-function Start-SetupOllama { param($Executable, $BaseUrl, $LogsDirectory) }
 $originalHost = $env:OLLAMA_HOST
 try {
-    foreach ($case in @('yes', 'no', 'invalid', 'cancelled', 'missing', 'existing')) {
+    foreach ($case in @('yes', 'no', 'invalid', 'cancelled', 'missing')) {
         $script:installed = $false
-        $script:existing = $case -eq 'existing'
         $script:installSucceeds = $case -ne 'missing'
         $script:approve = $case -ne 'cancelled'
         $script:answers = @(if ($case -eq 'no') {'N'} elseif ($case -eq 'invalid') {'?'; 'y'} else {'Y'})
@@ -306,7 +334,7 @@ try {
 } finally { $env:OLLAMA_HOST = $originalHost }
 """
         )
-        for case in ("yes", "no", "invalid", "cancelled", "missing", "existing"):
+        for case in ("yes", "no", "invalid", "cancelled", "missing"):
             self.assertIn(f"PASS: {case}", output)
 
     def test_post_install_reuses_running_ollama_without_prompt(self):
@@ -335,7 +363,7 @@ try {
 if (-not $caught) { throw 'Expected manual-start instructions' }
 """
         )
-        self.assertIn("installation completed", output)
+        self.assertIn("installed but not responding", output)
 
     def test_post_install_starts_loopback_waits_and_restores_host(self):
         output = self.run_ps(

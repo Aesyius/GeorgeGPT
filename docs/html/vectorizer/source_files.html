@@ -105,7 +105,7 @@
                     <div class="attr variable">
             <span class="name">TEXT_EXTENSIONS</span>        =
 <input id="TEXT_EXTENSIONS-view-value" class="view-value-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
-            <label class="view-value-button pdoc-button" for="TEXT_EXTENSIONS-view-value"></label><span class="default_value">{&#39;.tf&#39;, &#39;.py&#39;, &#39;.nix&#39;, &#39;.service&#39;, &#39;.markdown&#39;, &#39;.sql&#39;, &#39;.make&#39;, &#39;.lock&#39;, &#39;.toml&#39;, &#39;.bat&#39;, &#39;.target&#39;, &#39;.conf&#39;, &#39;.bash&#39;, &#39;.cmd&#39;, &#39;.txt&#39;, &#39;.sh&#39;, &#39;.hcl&#39;, &#39;.mk&#39;, &#39;.ini&#39;, &#39;.yml&#39;, &#39;.md&#39;, &#39;.json&#39;, &#39;.ps1&#39;, &#39;.rst&#39;, &#39;.yaml&#39;, &#39;.xml&#39;, &#39;.cfg&#39;, &#39;.env.example&#39;, &#39;.dockerfile&#39;}</span>
+            <label class="view-value-button pdoc-button" for="TEXT_EXTENSIONS-view-value"></label><span class="default_value">{&#39;.dockerfile&#39;, &#39;.cmd&#39;, &#39;.json&#39;, &#39;.sql&#39;, &#39;.mk&#39;, &#39;.txt&#39;, &#39;.hcl&#39;, &#39;.xml&#39;, &#39;.toml&#39;, &#39;.service&#39;, &#39;.env.example&#39;, &#39;.markdown&#39;, &#39;.yml&#39;, &#39;.cfg&#39;, &#39;.yaml&#39;, &#39;.bash&#39;, &#39;.lock&#39;, &#39;.ini&#39;, &#39;.nix&#39;, &#39;.sh&#39;, &#39;.py&#39;, &#39;.make&#39;, &#39;.ps1&#39;, &#39;.md&#39;, &#39;.tf&#39;, &#39;.target&#39;, &#39;.conf&#39;, &#39;.bat&#39;, &#39;.rst&#39;}</span>
 
 
     </div>
@@ -118,7 +118,7 @@
                     <div class="attr variable">
             <span class="name">IGNORED_DIRS</span>        =
 <input id="IGNORED_DIRS-view-value" class="view-value-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
-            <label class="view-value-button pdoc-button" for="IGNORED_DIRS-view-value"></label><span class="default_value">{&#39;.git&#39;, &#39;.hg&#39;, &#39;dist&#39;, &#39;.tox&#39;, &#39;.ruff_cache&#39;, &#39;.pytest_cache&#39;, &#39;build&#39;, &#39;.idea&#39;, &#39;venv&#39;, &#39;node_modules&#39;, &#39;.mypy_cache&#39;, &#39;.svn&#39;, &#39;target&#39;, &#39;site-packages&#39;, &#39;vendor&#39;, &#39;chroma_db&#39;, &#39;.venv-webui&#39;, &#39;.vscode&#39;, &#39;__pycache__&#39;, &#39;.venv&#39;, &#39;env&#39;}</span>
+            <label class="view-value-button pdoc-button" for="IGNORED_DIRS-view-value"></label><span class="default_value">{&#39;.tox&#39;, &#39;vendor&#39;, &#39;dist&#39;, &#39;.idea&#39;, &#39;.git&#39;, &#39;build&#39;, &#39;.vscode&#39;, &#39;node_modules&#39;, &#39;chroma_db&#39;, &#39;.pytest_cache&#39;, &#39;.ruff_cache&#39;, &#39;.hg&#39;, &#39;site-packages&#39;, &#39;.venv-webui&#39;, &#39;.venv&#39;, &#39;env&#39;, &#39;__pycache__&#39;, &#39;target&#39;, &#39;venv&#39;, &#39;.svn&#39;, &#39;.mypy_cache&#39;}</span>
 
 
     </div>
@@ -143,7 +143,7 @@
                 <section id="SECRET_EXTENSIONS">
                     <div class="attr variable">
             <span class="name">SECRET_EXTENSIONS</span>        =
-<span class="default_value">{&#39;.p12&#39;, &#39;.sqlite&#39;, &#39;.pfx&#39;, &#39;.db&#39;, &#39;.pem&#39;, &#39;.kdbx&#39;, &#39;.key&#39;}</span>
+<span class="default_value">{&#39;.p12&#39;, &#39;.pfx&#39;, &#39;.key&#39;, &#39;.kdbx&#39;, &#39;.pem&#39;, &#39;.db&#39;, &#39;.sqlite&#39;}</span>
 
 
     </div>
@@ -198,8 +198,9 @@ A path outside <code>root</code> raises <code>ValueError</code>.</p>
             <div class="docstring"><p>Return eligible source paths in deterministic directory/filename order.</p>
 
 <p>Resolves <code>root</code>, prunes ignored directories and symlinks, applies
-<code><a href="#is_indexable">is_indexable</a></code>, and skips files over <code><a href="#MAX_SOURCE_BYTES">MAX_SOURCE_BYTES</a></code> or inaccessible
-stat results. Does not open file contents or use Git ignore rules.
+<code><a href="#is_indexable">is_indexable</a></code>, and skips files over <code><a href="#MAX_SOURCE_BYTES">MAX_SOURCE_BYTES</a></code>. Traversal or stat
+errors propagate to prevent an incomplete scan from deleting indexed chunks.
+Does not open file contents or use Git ignore rules.
 A nonexistent/non-directory root raises <code>ValueError</code>.</p>
 </div>
 

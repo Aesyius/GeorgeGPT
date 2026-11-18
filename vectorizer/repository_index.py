@@ -18,6 +18,7 @@ from .keyword_index import bm25_path as _bm25_path, write_bm25 as _write_bm25, u
 from .index_catalog import catalog_publication, manifest_mapping
 from common.model_config import resolve_embedding_model
 from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
+from common.runtime_defaults import DEFAULT_COLLECTION
 # Re-export the established discovery/storage helper imports for compatibility.
 from .source_files import (IGNORED_DIRS, SECRET_EXTENSIONS, SECRET_NAME, TEXT_EXTENSIONS,
                            discover_files, is_indexable)
@@ -62,7 +63,7 @@ def index_repository(
     repository: str | Path | None = None,
     *,
     db_path: str | Path = DEFAULT_DB_PATH,
-    collection_name: str = "repo_documents",
+    collection_name: str = DEFAULT_COLLECTION,
     embedding_model: str | None = None,
     ollama_url: str | None = None,
     chunk_size: int = 1400,

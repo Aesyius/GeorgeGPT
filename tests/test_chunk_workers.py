@@ -168,7 +168,7 @@ class ChunkWorkersTest(unittest.TestCase):
         self.assertTrue(report["ok"], report)
         with patch("vectorizer.retrieval.create_embeddings", return_value=embedder):
             retriever = Retriever(db_path=self.db_path, embedding_model="test-model")
-            with closing(retriever._client):
+            with closing(retriever):
                 hits = retriever._keyword_search("Example", 5)
                 self.assertEqual([hit["metadata"]["path"] for hit in hits], ["a.py"])
 

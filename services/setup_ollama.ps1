@@ -1,4 +1,15 @@
-# Post-install startup only; dot-sourcing this file does not launch anything.
+# Dot-sourcing this file does not discover or launch anything.
+
+function Find-SetupOllama([string]$ConfiguredPath) {
+    if (Test-Path -LiteralPath $ConfiguredPath -PathType Leaf) { return $ConfiguredPath }
+    foreach ($command in @(Get-Command 'ollama.exe' -CommandType Application -All -ErrorAction SilentlyContinue)) {
+        if (Test-Path -LiteralPath $command.Source -PathType Leaf) { return $command.Source }
+    }
+    if ($env:LOCALAPPDATA) {
+        $default = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
+        if (Test-Path -LiteralPath $default -PathType Leaf) { return $default }
+    }
+}
 
 function Start-SetupOllama {
     [CmdletBinding(SupportsShouldProcess = $true)]
@@ -22,7 +33,7 @@ function Start-SetupOllama {
         # A fresh installer may not have started the local server yet.
     }
 
-    Write-SetupStatus 'Ollama installation completed.' 'DONE' Green
+    Write-SetupStatus "Ollama is installed but not responding at $BaseUrl."
     do {
         $startOllama = (Read-Host 'Start Ollama now? Press Y/N').Trim()
     } while ($startOllama -notin @('Y', 'N'))

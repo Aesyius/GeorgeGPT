@@ -45,7 +45,8 @@ See [the setup guide](setup.html) for the full interactive workflow.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `-RepositoryPath PATH` | Required | Existing source directory; persisted in the selected bootup JSON. |
-| `-ConfigPath PATH` | Project `config/bootup.json` | Bootup configuration to use and update. |
+| `-ConfigPath PATH` | Local bootup config if present, otherwise the shared template | Bootup configuration to use; setup writes to the local copy when using the shared template. |
+| `-PythonPath PATH` | Discover Python via the launcher or `PATH` | Explicit path to a 64-bit Python 3.12 executable. |
 | `-NoBrowser` | Off | Suppress automatic WebUI browser opening only. |
 | `-WhatIf` | Off | Read configuration and preview offline, without changes or prerequisite probes. |
 | `-Confirm` | PowerShell default | Prompt before the setup action. |

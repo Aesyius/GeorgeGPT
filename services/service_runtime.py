@@ -9,6 +9,8 @@ import sys
 import time
 import urllib.request
 
+from common.sqlite_paths import read_only_sqlite_uri
+
 from .service_config import BootError, expand_path
 
 
@@ -110,7 +112,7 @@ def read_api_key(config: dict, root: Path) -> str:
     if not db_path.is_file():
         raise ConnectionNotConfigured(f"Open WebUI database not found: {db_path}. Configure the WebUI connection first.")
     try:
-        connection = sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True, timeout=10)
+        connection = sqlite3.connect(read_only_sqlite_uri(db_path), uri=True, timeout=10)
         try:
             rows = connection.execute(
                 'SELECT "key", value FROM config '

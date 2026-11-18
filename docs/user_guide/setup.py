@@ -17,7 +17,7 @@ Replace both with your real paths and quote paths containing spaces.
 
 ## Step 1 — Install the prerequisites
 
-1. Install **64-bit Python 3.12**, including the **py launcher**.
+1. Install **64-bit Python 3.12**. The `py` launcher is optional.
 2. Open PowerShell and check your Python installation:
 
 ```powershell
@@ -25,7 +25,8 @@ py -3.12 --version
 ```
 
 **Before continuing:** the command should report Python 3.12. If it is missing,
-finish installing Python and reopen PowerShell.
+try `python --version`. If Python 3.12 is installed but isn't discoverable,
+pass `-PythonPath "C:\Path\To\python.exe"` to `setup.ps1`.
 
 **Disk space:** budget approximately **15–20 GB for the completed installation**
 with the default `qwen3.5:9b` chat model, `qwen3-embedding:4B` embedding model,
@@ -62,7 +63,7 @@ It does not have to be the GeorgeGPT repository.
 | Review | What to check |
 | --- | --- |
 | `config/models.json` | Chat model, embedding model, context window, and retention. |
-| `config/bootup.json` | Ollama executable path, local ports, logs, and model-config path. Setup saves your chosen repository here. |
+| `config/bootup.json` | Shared defaults for Ollama, local ports, logs, and model config. Setup saves the chosen repository in Git-ignored `config/bootup.local.json` by default. |
 | `vectorizer/source_files.py` | Source filters, especially before indexing sensitive repositories. |
 
 The shipped model settings are `qwen3.5:9b`, `qwen3-embedding:4B`, a
@@ -228,7 +229,8 @@ For other failures, use [Troubleshooting](troubleshooting.html).
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `-RepositoryPath PATH` | Required | Existing source directory; saved in the selected bootup JSON. Relative paths resolve from the current directory. |
-| `-ConfigPath PATH` | Project `config/bootup.json` | Existing bootup JSON; supplied relative paths resolve from the current directory. |
+| `-ConfigPath PATH` | Local bootup config if present, otherwise the shared template | Existing bootup JSON; supplied relative paths resolve from the current directory. |
+| `-PythonPath PATH` | Discover Python via the launcher or `PATH` | Explicit path to a 64-bit Python 3.12 interpreter. |
 | `-NoBrowser` | Off | Do not open the browser automatically. Services and connection prompts still run. |
 | `-WhatIf` | Off | Offline preview; no installation, consent prompts, or persistent changes. |
 | `-ChunkWorkers` | `4` | Parallel file preparation processes during first-time indexing (1–10). Use `1` for serial chunking. |

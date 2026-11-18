@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 from contextlib import closing
 import hashlib
-import os
 from pathlib import Path
 
 import chromadb
@@ -16,7 +15,8 @@ from .chunk_workers import MAX_CHUNK_WORKERS, validate_chunk_workers
 from .embeddings import DEFAULT_EMBEDDING_TIMEOUT, create_embeddings, validate_embedding_timeout
 from common.model_config import resolve_embedding_model
 from common.ollama_runtime import ensure_ollama_running
-from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
+from common.paths import resolve_path, configured_repository
+from common.runtime_defaults import index_collection, index_db_path, ollama_base_url
 from .chunking import chunk_file
 from .keyword_index import bm25_path as _bm25_path, write_bm25 as _write_bm25
 from .repository_index import index_repository, repository_chunk_id
@@ -103,12 +103,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=resolve_path, default=None,
                          help="repository directory or UTF-8 file (default: configured repository_path)")
-    parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))),
-                        help="Chroma directory (default: chroma_db beside this script)")
-    parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))
+    parser.add_argument("--db-path", type=resolve_path, default=index_db_path(),
+                        help="Chroma directory (default: project-root chroma_db)")
+    parser.add_argument("--collection", default=index_collection())
     parser.add_argument("--embedding-model", default=None,
                         help="override the embedding model selected by config/models.json (or RAG_MODEL_CONFIG)")
-    parser.add_argument("--ollama-url", default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
+    parser.add_argument("--ollama-url", default=ollama_base_url())
     parser.add_argument("--chunk-size", type=int, default=1400, help="maximum characters per structural chunk")
     parser.add_argument("--overlap", type=int, default=180, help="overlap for long sections")
     parser.add_argument("--batch-size", type=int, default=32, help="maximum chunks per Ollama embedding request")

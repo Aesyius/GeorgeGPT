@@ -107,7 +107,7 @@ Replace both with your real paths and quote paths containing spaces.</p>
 <h2 id="step-1-install-the-prerequisites">Step 1 — Install the prerequisites</h2>
 
 <ol>
-<li>Install <strong>64-bit Python 3.12</strong>, including the <strong>py launcher</strong>.</li>
+<li>Install <strong>64-bit Python 3.12</strong>. The <code>py</code> launcher is optional.</li>
 <li>Open PowerShell and check your Python installation:</li>
 </ol>
 
@@ -117,7 +117,8 @@ Replace both with your real paths and quote paths containing spaces.</p>
 </div>
 
 <p><strong>Before continuing:</strong> the command should report Python 3.12. If it is missing,
-finish installing Python and reopen PowerShell.</p>
+try <code>python --version</code>. If Python 3.12 is installed but isn't discoverable,
+pass <code>-PythonPath "C:\Path\To\python.exe"</code> to <code>setup.ps1</code>.</p>
 
 <p><strong>Disk space:</strong> budget approximately <strong>15–20 GB for the completed installation</strong>
 with the default <code>qwen3.5:9b</code> chat model, <code>qwen3-embedding:4B</code> embedding model,
@@ -167,7 +168,7 @@ It does not have to be the GeorgeGPT repository.</p>
 </tr>
 <tr>
   <td><code>config/bootup.json</code></td>
-  <td>Ollama executable path, local ports, logs, and model-config path. Setup saves your chosen repository here.</td>
+  <td>Shared defaults for Ollama, local ports, logs, and model config. Setup saves the chosen repository in Git-ignored <code>config/bootup.local.json</code> by default.</td>
 </tr>
 <tr>
   <td><code>vectorizer/source_files.py</code></td>
@@ -389,8 +390,13 @@ For other failures, use <a href="troubleshooting.html">Troubleshooting</a>.</p>
 </tr>
 <tr>
   <td><code>-ConfigPath PATH</code></td>
-  <td>Project <code>config/bootup.json</code></td>
+  <td>Local bootup config if present, otherwise the shared template</td>
   <td>Existing bootup JSON; supplied relative paths resolve from the current directory.</td>
+</tr>
+<tr>
+  <td><code>-PythonPath PATH</code></td>
+  <td>Discover Python via the launcher or <code>PATH</code></td>
+  <td>Explicit path to a 64-bit Python 3.12 interpreter.</td>
 </tr>
 <tr>
   <td><code>-NoBrowser</code></td>

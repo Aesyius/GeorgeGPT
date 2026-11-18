@@ -36,13 +36,16 @@ Documentation dependencies are separate from application requirements.
 
 On **Windows 10/11 (64-bit)** with **PowerShell 5.1 or newer**, install:
 
-- **64-bit Python 3.12**, including the `py` launcher.
-- **Ollama**, with its local server running.
+- **64-bit Python 3.12**. The `py` launcher is optional; setup also checks `PATH`.
+  For a Python install not on `PATH`, pass `-PythonPath "C:\Path\To\python.exe"`.
+- **Ollama**. Setup looks at the configured executable, then `PATH`, then the
+  standard per-user install location.
 
 If Ollama is missing, `setup.ps1` offers to run
 `irm https://ollama.com/install.ps1 | iex` after a **Y/N** consent prompt.
-Only **Y** runs the downloaded installer; **N** stops setup. After installation,
-setup reuses a running Ollama server or asks **Start Ollama now? Press Y/N**.
+Only **Y** runs the downloaded installer; **N** stops setup. Whether Ollama was
+already installed or just installed, setup reuses a running local server or
+asks **Start Ollama now? Press Y/N**.
 **Y** starts the loopback-only server and waits for readiness; **N** stops setup
 so you can start Ollama manually. `-WhatIf` never installs or starts Ollama.
 
@@ -115,8 +118,9 @@ Tested direct dependencies are pinned in `requirements.txt` and
 handling. The repository path is saved for the current machine; the shipped
 `../FAK` value is only a portable default, not a required folder name.
 
-If Ollama is installed somewhere other than `%LOCALAPPDATA%\Programs\Ollama`,
-update `ollama.executable` in your local bootup config. If another program uses one of
+If Ollama is installed outside the standard location and isn’t on `PATH`,
+set `ollama.executable` in your local bootup config. Setup saves a discovered
+non-default executable for future managed launches. If another program uses one of
 the local ports, choose a different port and update `rag_api.openai_base_url` to
 match when changing the API port. Keep all hosts on loopback.
 

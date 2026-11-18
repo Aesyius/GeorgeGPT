@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import math
-import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -19,6 +18,8 @@ from .source_files import discover_files
 from .vector_store import collection_snapshot as _collection_snapshot
 from common.model_config import resolve_embedding_model
 from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
+from common.runtime_defaults import DEFAULT_COLLECTION, index_collection, index_db_path
+from common.sqlite_paths import read_only_sqlite_uri
 from common.progress import ProgressBar
 from .repository_index import (
     _hash,
@@ -31,7 +32,7 @@ KNOWN_VECTOR_DIMENSIONS = {"qwen3-embedding:0.6b": 1024, "qwen3-embedding:4b": 2
 
 def verify_repository_index(repository: str | Path | None = None, *,
                             db_path: str | Path = DEFAULT_DB_PATH,
-                            collection_name: str = "repo_documents",
+                            collection_name: str = DEFAULT_COLLECTION,
                             embedding_model: str | None = None,
                             chunk_size: int = 1400, overlap: int = 180,
                             page_size: int = 256,
@@ -123,7 +124,7 @@ def verify_repository_index(repository: str | Path | None = None, *,
     bm25_path = _bm25_path(db_dir, collection_name)
     bm25_ids: set[str] = set()
     if bm25_path.is_file():
-        db = sqlite3.connect(f"{bm25_path.as_uri()}?mode=ro", uri=True)
+        db = sqlite3.connect(read_only_sqlite_uri(bm25_path), uri=True)
         try:
             bm25_ids = {row[0] for row in db.execute("SELECT id FROM chunks WHERE repository = ?", (str(root),))}
         finally:
@@ -164,8 +165,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=resolve_path, default=None,
                         help="repository directory (default: configured repository_path)")
-    parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))))
-    parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))
+    parser.add_argument("--db-path", type=resolve_path, default=index_db_path())
+    parser.add_argument("--collection", default=index_collection())
     parser.add_argument("--embedding-model", default=None, help="override the configured embedding model")
     parser.add_argument("--chunk-size", type=int, default=1400)
     parser.add_argument("--overlap", type=int, default=180)

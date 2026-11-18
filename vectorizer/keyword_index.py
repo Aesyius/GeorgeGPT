@@ -7,6 +7,8 @@ from pathlib import Path
 import sqlite3
 import tempfile
 
+from common.sqlite_paths import read_only_sqlite_uri
+
 CREATE_SCHEMA = (
     "CREATE VIRTUAL TABLE chunks USING fts5("
     "id UNINDEXED, text, path UNINDEXED, start_line UNINDEXED, end_line UNINDEXED, "
@@ -83,7 +85,7 @@ def update_bm25(path: Path, repository: str, documents: Iterable[dict]) -> None:
     """
     with atomic_database(path) as database:
         if path.is_file():
-            with closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as source:
+            with closing(sqlite3.connect(read_only_sqlite_uri(path), uri=True)) as source:
                 source.backup(database)
         else:
             database.execute(CREATE_SCHEMA)

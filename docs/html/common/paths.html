@@ -62,6 +62,12 @@
                     <a class="variable" href="#DEFAULT_BOOTUP_CONFIG">DEFAULT_BOOTUP_CONFIG</a>
             </li>
             <li>
+                    <a class="variable" href="#LOCAL_BOOTUP_CONFIG">LOCAL_BOOTUP_CONFIG</a>
+            </li>
+            <li>
+                    <a class="function" href="#default_bootup_config">default_bootup_config</a>
+            </li>
+            <li>
                     <a class="function" href="#resolve_path">resolve_path</a>
             </li>
             <li>
@@ -125,12 +131,41 @@
                 <section id="DEFAULT_BOOTUP_CONFIG">
                     <div class="attr variable">
             <span class="name">DEFAULT_BOOTUP_CONFIG</span>        =
-<span class="default_value">WindowsPath(&#39;{PROJECT_ROOT}/config/bootup.json&#39;)</span>
+<input id="DEFAULT_BOOTUP_CONFIG-view-value" class="view-value-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+            <label class="view-value-button pdoc-button" for="DEFAULT_BOOTUP_CONFIG-view-value"></label><span class="default_value">WindowsPath(&#39;{PROJECT_ROOT}/config/bootup.json&#39;)</span>
 
 
     </div>
     <a class="headerlink" href="#DEFAULT_BOOTUP_CONFIG"></a>
 
+
+
+                </section>
+                <section id="LOCAL_BOOTUP_CONFIG">
+                    <div class="attr variable">
+            <span class="name">LOCAL_BOOTUP_CONFIG</span>        =
+<input id="LOCAL_BOOTUP_CONFIG-view-value" class="view-value-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+            <label class="view-value-button pdoc-button" for="LOCAL_BOOTUP_CONFIG-view-value"></label><span class="default_value">WindowsPath(&#39;{PROJECT_ROOT}/config/bootup.local.json&#39;)</span>
+
+
+    </div>
+    <a class="headerlink" href="#LOCAL_BOOTUP_CONFIG"></a>
+
+
+
+                </section>
+                <section id="default_bootup_config">
+                    <div class="attr function">
+
+        <span class="def">def</span>
+        <span class="name">default_bootup_config</span><span class="signature pdoc-code condensed">(<span class="return-annotation">) -> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span>:</span></span>
+
+
+    </div>
+    <a class="headerlink" href="#default_bootup_config"></a>
+
+            <div class="docstring"><p>Prefer the machine-local configuration over the tracked defaults.</p>
+</div>
 
 
                 </section>

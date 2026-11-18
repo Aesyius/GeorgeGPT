@@ -9,7 +9,8 @@ param(
     [ValidateRange(1, 10)]
     [int]$ChunkWorkers = 4,
     [ValidateRange(1, 3600)]
-    [int]$EmbeddingTimeoutSeconds = 120
+    [int]$EmbeddingTimeoutSeconds = 120,
+    [string]$PythonPath
 )
 
 Set-StrictMode -Version Latest
@@ -24,11 +25,52 @@ function Resolve-ProjectPath([string]$Value) {
     return [IO.Path]::GetFullPath($expanded)
 }
 
-function Ensure-Environment([string]$Name, [string]$Launcher) {
+function Find-SetupPython([string]$ExplicitPath) {
+    $candidates = @(
+        if ($ExplicitPath) {
+            $path = (Resolve-Path -LiteralPath $ExplicitPath).Path
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or [IO.Path]::GetExtension($path) -ne '.exe') {
+                throw '-PythonPath must point to a Python executable.'
+            }
+            [pscustomobject]@{Path = $path; Prefix = @()}
+        } else {
+            foreach ($name in @('py.exe', 'python3.12.exe', 'python.exe', 'python3.exe')) {
+                foreach ($command in @(Get-Command $name -CommandType Application -All -ErrorAction SilentlyContinue)) {
+                    # Avoid invoking the generic Store installation aliases.
+                    if ($name -in @('python.exe', 'python3.exe') -and
+                        $command.Source -like '*\Microsoft\WindowsApps\*') { continue }
+                    $prefix = @()
+                    if ($name -eq 'py.exe') { $prefix = @('-3.12') }
+                    [pscustomobject]@{Path = $command.Source; Prefix = $prefix}
+                }
+            }
+        }
+    )
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        # Older launchers or other Python versions are expected to fail the probe.
+        $ErrorActionPreference = 'Continue'
+        foreach ($candidate in $candidates) {
+            $prefix = $candidate.Prefix
+            $path = $candidate.Path
+            $output = @(& $path @prefix -c "import json,sys; sys.exit(1) if sys.version_info[:2] != (3, 12) or sys.maxsize <= 2**32 else print(json.dumps(dict(path=sys.executable)))" 2>$null)
+            if ($LASTEXITCODE -eq 0 -and $output.Count -eq 1) {
+                try { $resolved = ($output[0] | ConvertFrom-Json -ErrorAction Stop).path } catch { continue }
+                if ($resolved -and (Test-Path -LiteralPath $resolved -PathType Leaf)) { return $resolved }
+            }
+        }
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    if ($ExplicitPath) { throw '-PythonPath must point to a working 64-bit Python 3.12 interpreter.' }
+    throw '64-bit Python 3.12 was not found. Add it to PATH or pass -PythonPath with the full path to python.exe.'
+}
+
+function Ensure-Environment([string]$Name, [string]$BasePython) {
     $directory = Join-Path $PSScriptRoot $Name
     $python = Join-Path $directory 'Scripts\python.exe'
     if (-not (Test-Path -LiteralPath $directory)) {
-        Invoke-Checked $Launcher @('-3.12', '-m', 'venv', $directory) | Out-Host
+        Invoke-Checked $BasePython @('-m', 'venv', $directory) | Out-Host
     } elseif (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
         throw "Existing $Name has no Python executable. Repair it manually; setup will not overwrite it."
     }
@@ -43,9 +85,8 @@ try {
 ============================================================
 
   Before you begin:
-    - Install 64-bit Python 3.12 with the py launcher.
-    - Start Ollama if it is already installed.
-      If it is missing, setup will ask before installing it.
+    - Install 64-bit Python 3.12. The py launcher is optional.
+    - Setup asks before installing or starting Ollama.
 
   Setup prepares the Python environments, installs Open WebUI,
   downloads missing models, and indexes your repository.
@@ -105,22 +146,16 @@ try {
         }
         Write-SetupSection 'Checking prerequisites'
         Write-SetupStatus 'Checking Python, local configuration, Ollama, and service ports...'
-        $pythonCommand = Get-Command 'py.exe' -ErrorAction SilentlyContinue
-        if (-not $pythonCommand) { throw 'Install 64-bit Python 3.12 with the py launcher before running setup.' }
-        $launcher = $pythonCommand.Source
-        Invoke-Checked $launcher @('-3.12', '-c', 'import sys; assert sys.maxsize > 2**32')
+        $basePython = Find-SetupPython $PythonPath
+        Write-SetupStatus "Using Python: $basePython"
         # No project dependencies are needed for local-only configuration checks.
-        Invoke-Checked $launcher @('-3.12', (Join-Path $PSScriptRoot 'services\setup_check.py'),
+        Invoke-Checked $basePython @((Join-Path $PSScriptRoot 'services\setup_check.py'),
                                   '--config', $configFile, '--repository', $repository)
-        $ollama = Resolve-ProjectPath $config.ollama.executable
-        if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) {
-            $existingOllama = Get-Command 'ollama.exe' -ErrorAction SilentlyContinue
-            $defaultOllama = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
-            if ($existingOllama -or (Test-Path -LiteralPath $defaultOllama -PathType Leaf)) {
-                throw 'Ollama is already installed, but the configured executable is missing. Set ollama.executable in config/bootup.json to its actual installation path, then retry.'
-            }
+        $configuredOllama = Resolve-ProjectPath $config.ollama.executable
+        $ollama = Find-SetupOllama $configuredOllama
+        if (-not $ollama) {
             Write-SetupSection 'Ollama installation required' Yellow
-            Write-Host "Expected executable: $ollama"
+            Write-Host "Configured executable: $configuredOllama"
             Write-Host 'With your permission, setup will download and run the official installer.'
             Write-Host 'This executes a script from the internet on your computer:'
             Write-Host '  irm https://ollama.com/install.ps1 | iex'
@@ -143,13 +178,13 @@ try {
             } finally {
                 $env:OLLAMA_HOST = $previousOllamaHost
             }
-            if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) {
-                throw 'Ollama installer finished, but the configured executable is still missing. Check the installation and ollama.executable in config/bootup.json, then rerun setup.'
+            $ollama = Find-SetupOllama $configuredOllama
+            if (-not $ollama) {
+                throw 'Ollama installer finished, but ollama.exe was not found. Set ollama.executable in your bootup configuration or restart PowerShell and retry.'
             }
-            Start-SetupOllama -Executable $ollama `
-                -BaseUrl "http://$($config.ollama.host):$($config.ollama.port)" -LogsDirectory $logsDirectory
         }
         $ollamaUrl = "http://$($config.ollama.host):$($config.ollama.port)"
+        Start-SetupOllama -Executable $ollama -BaseUrl $ollamaUrl -LogsDirectory $logsDirectory
         try { $tags = Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 5 }
         catch { throw "Ollama is not reachable at $ollamaUrl. Start the Ollama application, then retry." }
         $installedModels = @($tags.models | ForEach-Object { $_.name })
@@ -184,6 +219,7 @@ try {
     # Persist the chosen source so future bootups use the same repository.
     # Never save the machine-specific path to the tracked template.
     if ($configFile -eq $templateConfig) { $configFile = $localConfig }
+    if ($ollama -ne $configuredOllama) { $config.ollama.executable = $ollama }
     $config | Add-Member -MemberType NoteProperty -Name repository_path -Value $repository -Force
     [IO.File]::WriteAllText($configFile, ($config | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
 
@@ -199,8 +235,8 @@ try {
         $OutputEncoding = [Console]::OutputEncoding
         Write-SetupStep 1
         Write-Host 'Preparing .venv for GeorgeGPT and .venv-webui for Open WebUI...'
-        $python = Ensure-Environment '.venv' $launcher
-        $web = Ensure-Environment '.venv-webui' $launcher
+        $python = Ensure-Environment '.venv' $basePython
+        $web = Ensure-Environment '.venv-webui' $basePython
         Complete-SetupStep
 
         Write-SetupStep 2

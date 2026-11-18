@@ -7,6 +7,7 @@ import time
 from httpx import TimeoutException
 from langchain_ollama import OllamaEmbeddings
 from common.model_config import resolve_embedding_model, DEFAULT_KEEP_ALIVE_SECONDS, validate_keep_alive
+from common.runtime_defaults import ollama_base_url
 
 DEFAULT_EMBEDDING_TIMEOUT = 120
 
@@ -40,7 +41,7 @@ def create_embeddings(
         options["client_kwargs"] = {"timeout": timeout_seconds}
     return OllamaEmbeddings(
         model=resolve_embedding_model(model),
-        base_url=base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        base_url=base_url or ollama_base_url(),
         keep_alive=keep_alive_seconds,
         **options,
     )

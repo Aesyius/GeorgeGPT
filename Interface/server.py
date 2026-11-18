@@ -20,7 +20,9 @@ from starlette.concurrency import run_in_threadpool
 from .chat import (ChatError, MAX_QUESTION_CHARS, bounded_history, build_messages,
                    generate_answer, prepare_evidence, stream_answer)
 from .completion_queue import CompletionQueue, CompletionQueueFull
-from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
+from common.paths import DEFAULT_DB_PATH, configured_repository
+from common.runtime_defaults import (DEFAULT_COLLECTION, DEFAULT_OLLAMA_URL,
+                                    index_collection, index_db_path, ollama_base_url)
 from common.model_config import (DEFAULT_CONTEXT_WINDOW_TOKENS, DEFAULT_KEEP_ALIVE_SECONDS, ModelSettings)
 
 MODEL_ID = "GeorgeGPT"
@@ -52,9 +54,9 @@ class ServerConfig:
     api_key: str
     chat_model: str = field(default_factory=lambda: ModelSettings.from_env().chat_model)
     db_path: Path = DEFAULT_DB_PATH
-    collection_name: str = "repo_documents"
+    collection_name: str = DEFAULT_COLLECTION
     embedding_model: str = field(default_factory=lambda: ModelSettings.from_env().embedding_model)
-    ollama_url: str = "http://localhost:11434"
+    ollama_url: str = DEFAULT_OLLAMA_URL
     context_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS
     keep_alive_seconds: int = DEFAULT_KEEP_ALIVE_SECONDS
     repository_path: Path | None = None
@@ -79,10 +81,10 @@ class ServerConfig:
         return cls(
             api_key=os.getenv("RAG_API_KEY", ""),
             chat_model=models.chat_model,
-            db_path=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))),
-            collection_name=os.getenv("RAG_COLLECTION", "repo_documents"),
+            db_path=index_db_path(),
+            collection_name=index_collection(),
             embedding_model=models.embedding_model,
-            ollama_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            ollama_url=ollama_base_url(),
             context_window_tokens=models.context_window_tokens,
             keep_alive_seconds=models.keep_alive_seconds,
             repository_path=configured_repository(),
@@ -163,8 +165,12 @@ def create_app(config: ServerConfig | None = None, retriever=None) -> FastAPI:
             )
         else:
             app.state.retriever = retriever
-        app.state.completions = CompletionQueue(MAX_WAITING_REQUESTS, REQUEST_QUEUE_TIMEOUT_SECONDS)
-        yield
+        try:
+            app.state.completions = CompletionQueue(MAX_WAITING_REQUESTS, REQUEST_QUEUE_TIMEOUT_SECONDS)
+            yield
+        finally:
+            if retriever is None:
+                await run_in_threadpool(app.state.retriever.close)
 
     app = FastAPI(title="Repository RAG", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 

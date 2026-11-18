@@ -103,7 +103,8 @@ Reuses compatible vectors for this source, embeds missing chunks in fixed
 batches of 32, removes stale source vectors, and rebuilds collection BM25
 rows. Does not register a repository catalog or start Ollama itself.</p>
 
-<p>Empty input or a collection owned by another embedder raises <code>ValueError</code>.
+<p>Empty input, a repository collection, or a collection owned by another
+embedder raises <code>ValueError</code>.
 <code>embedding_timeout_seconds</code> bounds an Ollama HTTP wait.
 Use a separate collection when changing single-file embedding models.
 Partial completed writes can remain if later work fails.</p>
