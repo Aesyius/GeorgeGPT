@@ -12,6 +12,7 @@ from pathlib import Path
 import chromadb
 
 from .chunking import DEFAULT_EMBEDDING_BYTES, embedding_metadata
+from .chunk_workers import MAX_CHUNK_WORKERS, validate_chunk_workers
 from .embeddings import create_embeddings
 from common.model_config import resolve_embedding_model
 from common.ollama_runtime import ensure_ollama_running
@@ -99,12 +100,15 @@ def main() -> None:
     parser.add_argument("--chunk-size", type=int, default=1400, help="maximum characters per structural chunk")
     parser.add_argument("--overlap", type=int, default=180, help="overlap for long sections")
     parser.add_argument("--batch-size", type=int, default=32, help="maximum chunks per Ollama embedding request")
+    parser.add_argument("--chunk-workers", type=int, default=1,
+                        help=f"file preparation processes for repositories (1-{MAX_CHUNK_WORKERS}; default: 1)")
     parser.add_argument("--max-embedding-bytes", type=int, default=DEFAULT_EMBEDDING_BYTES,
                         help="UTF-8 byte cap including source context (conservative token-size proxy)")
     args = parser.parse_args()
     if args.batch_size < 1:
         parser.error("--batch-size must be positive")
     try:
+        validate_chunk_workers(args.chunk_workers)
         if args.path is None:
             args.path = configured_repository()
         if not (args.path.is_dir() or args.path.is_file()):
@@ -117,7 +121,7 @@ def main() -> None:
             result = index_repository(args.path, db_path=args.db_path, collection_name=selected_collection,
                                       embedding_model=args.embedding_model, ollama_url=args.ollama_url,
                                        chunk_size=args.chunk_size, overlap=args.overlap, batch_size=args.batch_size,
-                                       max_embedding_bytes=args.max_embedding_bytes)
+                                        max_embedding_bytes=args.max_embedding_bytes, chunk_workers=args.chunk_workers)
             register_index(args.db_path, args.collection, selected_collection, args.embedding_model)
             print(f"Indexed {result['files']} files / {result['chunks']} chunks ({result['embedded_chunks']} newly embedded, "
                   f"{result['reused_chunks']} reused, {result['removed_chunks']} stale removed) from {result['repository']} "

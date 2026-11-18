@@ -107,11 +107,16 @@ automatically launched Ollama remains running.
 | `--chunk-size N` | `1400` | Maximum structural chunk characters. |
 | `--overlap N` | `180` | Character overlap for long sections. |
 | `--batch-size N` | `32` | Positive maximum chunks per embedding request for repository indexing. |
+| `--chunk-workers N` | `1` | File preparation processes for repositories only. `1` is serial; the maximum is `10`. |
 | `--max-embedding-bytes N` | `4096` | UTF-8 embedding input cap, including source context; a conservative token-size proxy. |
 
 The single-file workflow uses a fixed embedding batch size of 32 even when
 `--batch-size` is supplied. Changing single-file embedding models requires
 an explicitly separate collection.
+
+Try `--chunk-workers 2` or `--chunk-workers 4` for large repositories. This
+parallelizes file preparation, not Ollama embeddings or database writes. Small
+repositories may be faster without the overhead of starting worker processes.
 
 ```powershell
 .\.venv\Scripts\python.exe -m vectorizer.vectorize "C:\Repos\MyProject" --chunk-size 1200 --overlap 150 --batch-size 16 --max-embedding-bytes 4096

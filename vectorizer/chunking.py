@@ -12,6 +12,14 @@ EMBEDDING_INPUT_VERSION = "context-v1"
 DEFAULT_EMBEDDING_BYTES = 4096
 
 
+def validate_chunk_settings(chunk_size: int, overlap: int, max_embedding_bytes: int) -> None:
+    """Reject invalid limits before preparing files or starting worker processes."""
+    if chunk_size < 200 or overlap < 0 or overlap >= chunk_size:
+        raise ValueError("chunk size must be at least 200 and overlap must be non-negative and smaller than chunk size")
+    if max_embedding_bytes < 512:
+        raise ValueError("embedding byte budget must be at least 512")
+
+
 def embedding_metadata(chunk: dict, model: str, max_bytes: int) -> dict:
     """Return structural and version metadata for a chunk's stored vector.
 
@@ -142,10 +150,7 @@ def chunk_file(path: Path, relative: str, *, chunk_size: int = 1400, overlap: in
     while offsets are adjusted. Invalid limits or oversized context raise
     `ValueError`; file/encoding errors propagate when loading from disk.
     """
-    if chunk_size < 200 or overlap < 0 or overlap >= chunk_size:
-        raise ValueError("chunk size must be at least 200 and overlap must be non-negative and smaller than chunk size")
-    if max_embedding_bytes < 512:
-        raise ValueError("embedding byte budget must be at least 512")
+    validate_chunk_settings(chunk_size, overlap, max_embedding_bytes)
     text = text if text is not None else path.read_text(encoding="utf-8-sig")
     if progress is not None:
         progress.start(f"Chunking {relative} (characters)", len(text))

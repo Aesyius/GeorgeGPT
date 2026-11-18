@@ -12,7 +12,8 @@ import chromadb
 
 from .embeddings import create_embeddings
 from .chunking import (CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, DEFAULT_EMBEDDING_BYTES,
-                       chunk_file, embedding_metadata)
+                       embedding_metadata, validate_chunk_settings)
+from .chunk_workers import iter_prepared_files, validate_chunk_workers
 from .keyword_index import bm25_path as _bm25_path, write_bm25 as _write_bm25, update_bm25 as _update_bm25
 from .index_catalog import catalog_publication, manifest_mapping
 from common.model_config import resolve_embedding_model
@@ -68,6 +69,7 @@ def index_repository(
     overlap: int = 180,
     batch_size: int = 32,
     max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES,
+    chunk_workers: int = 1,
     progress=None,
 ) -> dict:
     """Incrementally synchronize one repository into Chroma and SQLite FTS5.
@@ -82,6 +84,7 @@ def index_repository(
         overlap: Character overlap for long sections.
         batch_size: Positive maximum chunks per embedding request.
         max_embedding_bytes: Full embedding input byte cap, including context.
+        chunk_workers: Maximum file-preparation processes; 1 runs in the caller.
         progress: Optional progress reporter; defaults to `common.progress.ProgressBar`.
 
     Returns:
@@ -102,6 +105,8 @@ def index_repository(
         raise ValueError(f"repository is not a directory: {root}")
     if batch_size < 1:
         raise ValueError("embedding batch size must be positive")
+    validate_chunk_settings(chunk_size, overlap, max_embedding_bytes)
+    validate_chunk_workers(chunk_workers)
     files = discover_files(root)
     if not files:
         raise ValueError(f"no eligible source files found under {root}")
@@ -113,27 +118,23 @@ def index_repository(
     prepared: list[dict] = []
     source_hashes = []
     progress.start("Scanning/chunking files", len(files))
-    for file in files:
-        relative = file.relative_to(root).as_posix()
-        try:
-            text = file.read_text(encoding="utf-8-sig")
-        except (OSError, UnicodeError):
+    with closing(iter_prepared_files(files, root, workers=chunk_workers, chunk_size=chunk_size,
+                                     overlap=overlap, max_embedding_bytes=max_embedding_bytes)) as results:
+        for result in results:
+            if result is not None:
+                relative, content_hash, chunks = result
+                source_hashes.append((relative, content_hash))
+                for idx, chunk in enumerate(chunks):
+                    metadata = {
+                        "repository": str(root), "repository_id": repo_key, "revision": revision,
+                        "path": relative, "start_line": chunk["start_line"], "end_line": chunk["end_line"],
+                        "source": f"{root / relative}:{chunk['start_line']}-{chunk['end_line']}",
+                        **embedding_metadata(chunk, embedding_model, max_embedding_bytes),
+                    }
+                    doc_id = repository_chunk_id(repo_key, embedding_model, relative, chunk_size, overlap,
+                                                 content_hash, idx, max_embedding_bytes)
+                    prepared.append({"id": doc_id, "text": chunk["text"], "metadata": metadata})
             progress.advance()
-            continue
-        content_hash = _hash(text)
-        source_hashes.append((relative, content_hash))
-        for idx, chunk in enumerate(chunk_file(file, relative, chunk_size=chunk_size, overlap=overlap, text=text,
-                                             max_embedding_bytes=max_embedding_bytes)):
-            metadata = {
-                "repository": str(root), "repository_id": repo_key, "revision": revision,
-                "path": relative, "start_line": chunk["start_line"], "end_line": chunk["end_line"],
-                "source": f"{root / relative}:{chunk['start_line']}-{chunk['end_line']}",
-                **embedding_metadata(chunk, embedding_model, max_embedding_bytes),
-            }
-            doc_id = repository_chunk_id(repo_key, embedding_model, relative, chunk_size, overlap, content_hash, idx,
-                                         max_embedding_bytes)
-            prepared.append({"id": doc_id, "text": chunk["text"], "metadata": metadata})
-        progress.advance()
     progress.finish()
 
     keyword_path = _bm25_path(db_dir, collection_name)

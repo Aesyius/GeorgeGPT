@@ -7,6 +7,7 @@ __pycache__/
 # Keep local tests and generated runtime/index data out of new Git additions.
 /tests/*
 !/tests/test_setup_output.py
+!/tests/test_chunk_workers.py
 chroma_db/
 chromadb/
 runtime_logs/
