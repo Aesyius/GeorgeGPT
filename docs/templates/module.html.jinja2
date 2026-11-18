@@ -1,0 +1,63 @@
+{% extends "default/module.html.jinja2" %}
+{% set site_root = "../" * module.modulename.count(".") %}
+{% set guides = [
+    ("user_guide", "index.html", "Home"),
+    ("user_guide.setup", "user_guide/setup.html", "First-time setup"),
+    ("user_guide.daily_use", "user_guide/daily_use.html", "Daily use and bootup"),
+    ("user_guide.cli", "user_guide/cli.html", "CLI commands and flags"),
+    ("user_guide.configuration", "user_guide/configuration.html", "Configuration"),
+    ("user_guide.troubleshooting", "user_guide/troubleshooting.html", "Troubleshooting"),
+] %}
+
+{% block title %}
+{% for name, path, label in guides if name == module.modulename %}{{ label }} — GeorgeGPT{% else %}{{ module.modulename }} — GeorgeGPT API{% endfor %}
+{% endblock %}
+
+{% block nav_title %}
+<div class="site-navigation" role="navigation" aria-label="Documentation">
+    <a class="site-brand" href="{{ site_root }}index.html">GeorgeGPT documentation</a>
+    <h2>User guide</h2>
+    <ul>
+        {% for name, path, label in guides %}
+        <li><a href="{{ site_root }}{{ path }}"{% if module.modulename == name %} aria-current="page"{% endif %}>{{ label }}</a></li>
+        {% endfor %}
+    </ul>
+    <details{% if not module.modulename.startswith("user_guide") %} open{% endif %}>
+        <summary>Python API reference</summary>
+        <ul>
+            {% for name, label in [
+                ("vectorizer", "Indexing and retrieval"),
+                ("Interface", "Chat and API"),
+                ("services", "Setup and services"),
+                ("common", "Shared settings"),
+                ("evaluation", "Evaluation"),
+            ] %}
+            <li><a href="{{ site_root }}{{ name }}.html"{% if module.modulename == name %} aria-current="page"{% endif %}>{{ label }}</a></li>
+            {% endfor %}
+        </ul>
+    </details>
+</div>
+{% endblock %}
+
+{% block module_info %}
+<a id="page-top"></a>
+{{ super() }}
+{% if module.modulename.startswith("user_guide") %}
+<div class="guide-pagination" role="navigation" aria-label="Guide page sequence">
+    {% for name, path, label in guides if name == module.modulename %}
+        {% set position = guides.index((name, path, label)) %}
+        {% if position > 0 %}
+        <a rel="prev" href="{{ site_root }}{{ guides[position - 1][1] }}">← {{ guides[position - 1][2] }}</a>
+        {% endif %}
+        {% if position + 1 < guides | length %}
+        <a rel="next" href="{{ site_root }}{{ guides[position + 1][1] }}">{{ guides[position + 1][2] }} →</a>
+        {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block nav_footer %}
+<p class="site-top"><a href="#page-top">↑ Back to top</a></p>
+{{ super() }}
+{% endblock %}

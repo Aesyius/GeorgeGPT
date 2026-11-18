@@ -13,6 +13,23 @@ When you ask a question, the embedder converts the question into a vector, retri
 
 Open WebUI connects through the authenticated **GeorgeGPT** API. Its own Knowledge/RAG feature is not used.
 
+## HTML documentation
+
+The pdoc documentation includes a first-time setup walkthrough, bootup guide,
+complete project CLI/flag reference, configuration, troubleshooting, and Python APIs.
+After installing the project dependencies, build the static HTML:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-docs.txt
+.\.venv\Scripts\python.exe docs\build.py
+.\.venv\Scripts\python.exe docs\check.py
+Start-Process .\docs\html\index.html
+```
+
+Open `docs/html/index.html` directly in your browser; no documentation web server
+is started or needed. Share the whole `docs/html` folder to preserve page links.
+Documentation dependencies are separate from application requirements.
+
 ## User setup guide
 
 ### 1. Install prerequisites
@@ -21,6 +38,11 @@ On **Windows 10/11 (64-bit)** with **PowerShell 5.1 or newer**, install:
 
 - **64-bit Python 3.12**, including the `py` launcher.
 - **Ollama**, with its local server running.
+
+If Ollama is missing, `setup.ps1` offers to run
+`irm https://ollama.com/install.ps1 | iex` after a **Y/N** consent prompt.
+Only **Y** runs the downloaded installer; **N** stops setup. If needed, start
+Ollama after installation and retry setup. `-WhatIf` never runs the installer.
 
 Download and extract this repository to a short, writable path such as
 `C:\Projects\GeorgeGPT`, or clone it:
@@ -105,7 +127,16 @@ py -3.12 .\services\setup_check.py --config .\config\bootup.json --repository "C
 
 # Skip opening the browser:
 .\setup.ps1 -RepositoryPath "C:\Repos\FAK" -NoBrowser
+
+# Show detailed pip/Ollama output (quiet and logged by default):
+.\setup.ps1 -RepositoryPath "C:\Repos\FAK" -Verbose
 ```
+
+Setup displays timestamped stages, a steps-completed progress bar, and elapsed
+times. Detailed pip/Ollama output is saved to a unique `setup-*.log` under the
+configured log directory (normally `%LOCALAPPDATA%\Vectorizer\logs`).
+Failures show recent command output and the log location. Indexing progress
+and WebUI connection prompts remain visible. `-WhatIf` creates no setup log.
 
 Use `-ConfigPath` to select another bootup configuration. If PowerShell blocks a trusted checkout, use a process-only policy bypass:
 

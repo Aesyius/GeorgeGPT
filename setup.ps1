@@ -10,16 +10,13 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'services\setup_output.ps1')
+Initialize-SetupOutput ($VerbosePreference -eq 'Continue')
 
 function Resolve-ProjectPath([string]$Value) {
     $expanded = [Environment]::ExpandEnvironmentVariables($Value)
     if (-not [IO.Path]::IsPathRooted($expanded)) { $expanded = Join-Path $PSScriptRoot $expanded }
     return [IO.Path]::GetFullPath($expanded)
-}
-
-function Invoke-Checked([string]$Executable, [string[]]$Arguments) {
-    & $Executable @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "Command failed with exit code ${LASTEXITCODE}: $Executable" }
 }
 
 function Ensure-Environment([string]$Name, [string]$Launcher) {
@@ -37,11 +34,18 @@ function Ensure-Environment([string]$Name, [string]$Launcher) {
 try {
     Write-Host @'
 ============================================================
-          ENSURE THE SERVICES ARE INSTALLED
+                  GeorgeGPT - First-time setup
 ============================================================
-  REQUIRED: 64-BIT PYTHON 3.12 (WITH THE PY LAUNCHER)
-  REQUIRED: OLLAMA INSTALLED AND RUNNING LOCALLY
-  Setup installs the project dependencies and Open WebUI.
+
+  Before you begin:
+    - Install 64-bit Python 3.12 with the py launcher.
+    - Start Ollama if it is already installed.
+      If it is missing, setup will ask before installing it.
+
+  Setup prepares the Python environments, installs Open WebUI,
+  downloads missing models, and indexes your repository.
+  All services stay local to this computer.
+
 ============================================================
 '@ -ForegroundColor Yellow
     if ([string]::IsNullOrWhiteSpace($ConfigPath)) { $ConfigPath = Join-Path $PSScriptRoot 'config\bootup.json' }
@@ -67,10 +71,19 @@ try {
     if ((Resolve-ProjectPath $config.rag_api.python) -ne $apiPython -or (Resolve-ProjectPath $config.open_webui.python) -ne $webPython) {
         throw 'Setup manages the project .venv and .venv-webui only; adjust configured Python paths or install custom environments manually.'
     }
-    # Real setup checks prerequisites before confirmation or any installation.
+    # Real setup checks prerequisites; missing Ollama installation requires consent.
     # Keep -WhatIf offline: do not invoke Python, Ollama, or service probes.
     if (-not $WhatIfPreference) {
-        Write-Host 'Checking required prerequisites before setup...'
+        $script:SetupTimer = [Diagnostics.Stopwatch]::StartNew()
+        $logsDirectory = Resolve-ProjectPath $config.logs_directory
+        $null = New-Item -ItemType Directory -Path $logsDirectory -Force
+        $script:SetupLog = Join-Path $logsDirectory ("setup-{0}-{1}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
+        Write-SetupStatus "Detailed dependency/model output: $script:SetupLog"
+        if (-not $script:DetailedOutput) {
+            Write-SetupStatus 'Quiet output enabled. Use -Verbose to also show pip and Ollama output.'
+        }
+        Write-SetupSection 'Checking prerequisites'
+        Write-SetupStatus 'Checking Python, local configuration, Ollama, and service ports...'
         $pythonCommand = Get-Command 'py.exe' -ErrorAction SilentlyContinue
         if (-not $pythonCommand) { throw 'Install 64-bit Python 3.12 with the py launcher before running setup.' }
         $launcher = $pythonCommand.Source
@@ -80,7 +93,38 @@ try {
                                   '--config', $configFile, '--repository', $repository)
         $ollama = Resolve-ProjectPath $config.ollama.executable
         if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) {
-            throw 'Install Ollama or set ollama.executable in config/bootup.json to its actual installation path.'
+            $existingOllama = Get-Command 'ollama.exe' -ErrorAction SilentlyContinue
+            $defaultOllama = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
+            if ($existingOllama -or (Test-Path -LiteralPath $defaultOllama -PathType Leaf)) {
+                throw 'Ollama is already installed, but the configured executable is missing. Set ollama.executable in config/bootup.json to its actual installation path, then retry.'
+            }
+            Write-SetupSection 'Ollama installation required' Yellow
+            Write-Host "Expected executable: $ollama"
+            Write-Host 'With your permission, setup will download and run the official installer.'
+            Write-Host 'This executes a script from the internet on your computer:'
+            Write-Host '  irm https://ollama.com/install.ps1 | iex'
+            Write-Host 'Choose Y to install, or N to stop setup without installing.'
+            Write-Host ''
+            do {
+                $installOllama = (Read-Host 'Install Ollama now? Press Y/N').Trim()
+            } while ($installOllama -notin @('Y', 'N'))
+            if ($installOllama -ne 'Y') {
+                throw 'Ollama installation declined. Install it manually or correct ollama.executable, then rerun setup.'
+            }
+            if (-not $PSCmdlet.ShouldProcess('https://ollama.com/install.ps1', 'Download and execute the Ollama installer')) {
+                throw 'Ollama installation cancelled; setup cannot continue without Ollama.'
+            }
+            $previousOllamaHost = $env:OLLAMA_HOST
+            try {
+                # Installer-launched processes must inherit a loopback-only endpoint.
+                $env:OLLAMA_HOST = "http://$($config.ollama.host):$($config.ollama.port)"
+                irm https://ollama.com/install.ps1 | iex
+            } finally {
+                $env:OLLAMA_HOST = $previousOllamaHost
+            }
+            if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) {
+                throw 'Ollama installer finished, but the configured executable is still missing. Check the installation and ollama.executable in config/bootup.json, then rerun setup.'
+            }
         }
         $ollamaUrl = "http://$($config.ollama.host):$($config.ollama.port)"
         try { $tags = Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 5 }
@@ -91,15 +135,25 @@ try {
                 throw 'A configured local API/WebUI port is busy. Stop that service or select another loopback port in bootup.json.'
             }
         }
-        Write-Host 'Prerequisites confirmed: Python 3.12, Ollama installed/running, and API/WebUI ports available.' -ForegroundColor Green
+        Write-SetupStatus 'Prerequisites passed. Python and Ollama are ready; API/WebUI ports are free.' 'DONE' Green
     } else {
-        Write-Host 'Preview only: Python/Ollama availability and service ports will be checked during real setup.'
+        Write-Host ''
+        Write-Host 'PREVIEW ONLY (-WhatIf): no installation, downloads, indexing, or service startup.' -ForegroundColor Cyan
+        Write-Host 'Python, Ollama, and service ports will be checked when you run without -WhatIf.'
     }
 
-    Write-Host "Repository: $repository"
-    Write-Host "Models: $($models.chat_model), $($models.embedding_model)"
-    Write-Host 'Steps: create/reuse environments; install dependencies; pull missing models; index and verify; launch API/WebUI; save connection.'
-    Write-Host 'This downloads dependencies/model weights and indexes eligible text. Review source filters before indexing sensitive repositories.'
+    Write-SetupSection 'Setup overview'
+    Write-Host "  Repository:      $repository"
+    Write-Host "  Chat model:      $($models.chat_model)"
+    Write-Host "  Embedding model: $($models.embedding_model)"
+    Write-Host ''
+    for ($stepIndex = 0; $stepIndex -lt $script:SetupSteps.Count; $stepIndex++) {
+        Write-Host ('  {0}. {1}' -f ($stepIndex + 1), $script:SetupSteps[$stepIndex])
+    }
+    Write-Host ''
+    Write-Host 'Downloads require internet. Review source filters before indexing sensitive content.' -ForegroundColor Yellow
+    Write-Host '============================================================' -ForegroundColor Cyan
+    Write-Host ''
     if (-not $PSCmdlet.ShouldProcess($repository, 'Initialize GeorgeGPT and bootstrap its local services')) { return }
 
     # Persist the chosen source so future bootups use the same repository.
@@ -116,21 +170,52 @@ try {
         $env:PYTHONUTF8 = '1'
         [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
         $OutputEncoding = [Console]::OutputEncoding
-        Write-Host 'Preparing Python environments...'
+        Write-SetupStep 1
+        Write-Host 'Preparing .venv for GeorgeGPT and .venv-webui for Open WebUI...'
         $python = Ensure-Environment '.venv' $launcher
         $web = Ensure-Environment '.venv-webui' $launcher
-        Invoke-Checked $python @('-m', 'pip', 'install', '--upgrade', 'pip')
-        Invoke-Checked $web @('-m', 'pip', 'install', '--upgrade', 'pip')
-        Invoke-Checked $python @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'requirements.txt'))
-        Invoke-Checked $web @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'requirements-webui.txt'))
+        Complete-SetupStep
+
+        Write-SetupStep 2
+        Write-SetupStatus 'Updating pip in both environments...'
+        Invoke-Checked $python @('-m', 'pip', 'install', '--upgrade', 'pip') -Quiet
+        Invoke-Checked $web @('-m', 'pip', 'install', '--upgrade', 'pip') -Quiet
+        Write-Host ''
+        Write-SetupStatus 'Installing GeorgeGPT dependencies from requirements.txt...'
+        Invoke-Checked $python @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'requirements.txt')) -Quiet
+        Write-Host ''
+        Write-SetupStatus 'Installing Open WebUI dependencies from requirements-webui.txt...'
+        Invoke-Checked $web @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'requirements-webui.txt')) -Quiet
+        Complete-SetupStep
+
+        Write-SetupStep 3
+        Write-Host "Ollama endpoint: $ollamaUrl"
+        Write-Host 'Installed models are reused. Missing models will be downloaded.'
+        Write-Host 'Model downloads can be large. Detailed progress is saved to the setup log.'
+        Write-Host 'Use -Verbose to also show native download progress; no estimated percentage is shown in quiet mode.'
+        $requiredModels = @(@($models.chat_model, $models.embedding_model) | Select-Object -Unique)
+        $modelNumber = 0
         $oldOllamaHost = $env:OLLAMA_HOST
         try {
             $env:OLLAMA_HOST = $ollamaUrl
-            foreach ($model in @($models.chat_model, $models.embedding_model) | Select-Object -Unique) {
-                if ($installedModels -contains $model) { Write-Host "Using installed model: $model" }
-                else { Invoke-Checked $ollama @('pull', $model) }
+            foreach ($model in $requiredModels) {
+                $modelNumber++
+                Write-Host ''
+                Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+                Write-Host "  Model $modelNumber of $($requiredModels.Count): $model" -ForegroundColor Cyan
+                if ($installedModels -contains $model) {
+                    Write-SetupStatus "Already installed; using $model." 'SKIP' Green
+                } else {
+                    $modelTimer = [Diagnostics.Stopwatch]::StartNew()
+                    Write-SetupStatus "Pulling $model from Ollama. Please wait..." 'DOWNLOAD' Yellow
+                    Invoke-Checked $ollama @('pull', $model) -Quiet
+                    $modelTimer.Stop()
+                    Write-SetupStatus "Model downloaded: $model - elapsed $(Format-SetupDuration $modelTimer.Elapsed)" 'DONE' Green
+                }
             }
         } finally { $env:OLLAMA_HOST = $oldOllamaHost }
+        Write-Host ''
+        Complete-SetupStep
 
         $database = Join-Path $PSScriptRoot 'chroma_db'
         if ($env:RAG_DB_PATH) { $database = Resolve-ProjectPath $env:RAG_DB_PATH }
@@ -138,15 +223,30 @@ try {
         if ($env:RAG_COLLECTION) { $collection = $env:RAG_COLLECTION }
         $indexOptions = @($repository, '--embedding-model', $models.embedding_model, '--ollama-url', $ollamaUrl,
                           '--db-path', $database, '--collection', $collection)
-        Write-Host 'Indexing repository and verifying vectors/keyword rows...'
+        Write-SetupStep 4
+        Write-Host "Repository: $repository"
+        Write-Host "Embedding model: $($models.embedding_model)"
+        Write-Host 'First-time indexing may take a while. Progress will appear below.'
         Invoke-Checked $python (@('-m', 'vectorizer.vectorize') + $indexOptions)
+        Complete-SetupStep
+
+        Write-SetupStep 5
+        Write-Host 'Auditing chunks, vector metadata, embeddings, and keyword rows...'
         # The verifier is read-only and does not need an Ollama URL.
         $verifyOptions = @($repository, '--embedding-model', $models.embedding_model,
                            '--db-path', $database, '--collection', $collection)
         Invoke-Checked $python (@('-m', 'vectorizer.verify_index') + $verifyOptions)
+        Complete-SetupStep
+
+        Write-SetupStep 6
+        Write-Host 'Warming models and starting the local API and Open WebUI...'
+        Write-Host 'Then follow the connection instructions and return here to confirm.'
+        if ($NoBrowser) { Write-Host 'Automatic browser opening is disabled (-NoBrowser).' }
         $bootstrapOptions = @('-m', 'services.first_time_setup', '--config', $configFile)
         if ($NoBrowser) { $bootstrapOptions += '--no-browser' }
         Invoke-Checked $python $bootstrapOptions
+        Complete-SetupStep
+        Write-SetupSection "SETUP COMPLETE - All $($script:SetupSteps.Count) steps finished successfully." Green
     } finally {
         Pop-Location
         $env:RAG_REPOSITORY_PATH = $oldRepositoryPath
@@ -155,6 +255,13 @@ try {
         $OutputEncoding = $oldOutputEncoding
     }
 } catch {
-    [Console]::Error.WriteLine("First-time setup failed: $($_.Exception.Message)")
+    $failure = $_.Exception.Message
+    Complete-SetupStep -Failed
+    [Console]::Error.WriteLine("[{0}] [ERROR] First-time setup failed: {1}" -f (Get-Date -Format 'HH:mm:ss'), $failure)
     exit 1
+} finally {
+    if ($null -ne $script:SetupTimer) {
+        Write-Progress -Id 1 -Activity 'GeorgeGPT setup' -Completed
+    }
+    Write-SetupSummary
 }

@@ -1,0 +1,44 @@
+.site-navigation {
+    padding-right: var(--pad);
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--accent2);
+}
+.site-brand {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+.site-navigation a {
+    display: block;
+    padding: .35rem .5rem;
+    border-radius: .25rem;
+}
+.site-navigation a[aria-current="page"] {
+    background: var(--active);
+    color: var(--text);
+    font-weight: 700;
+}
+.site-navigation summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: .35rem 0;
+}
+.guide-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    border-top: 1px solid var(--accent2);
+    padding-top: 1.25rem;
+    margin-top: 2rem;
+}
+.guide-pagination a {
+    padding: .6rem .8rem;
+    border: 1px solid var(--accent2);
+    border-radius: .3rem;
+}
+.site-top {
+    margin-top: 1.5rem;
+}
