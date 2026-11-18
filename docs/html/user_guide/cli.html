@@ -316,6 +316,11 @@ automatically launched Ollama remains running.</p>
   <td>File preparation processes for repositories only. <code>1</code> is serial; the maximum is <code>10</code>.</td>
 </tr>
 <tr>
+  <td><code>--embedding-timeout N</code></td>
+  <td><code>120</code></td>
+  <td>Ollama HTTP timeout in seconds per attempt (1–3600) for repository or single-file indexing.</td>
+</tr>
+<tr>
   <td><code>--max-embedding-bytes N</code></td>
   <td><code>4096</code></td>
   <td>UTF-8 embedding input cap, including source context; a conservative token-size proxy.</td>

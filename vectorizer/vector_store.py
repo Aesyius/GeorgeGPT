@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import hashlib
 import json
+import sys
 
 from .chunking import CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, embedding_text
 from .embeddings import embed_documents_with_retry
@@ -137,11 +138,25 @@ def synchronize_vectors(collection, documents: list[dict], old_ids: set[str], ol
 
     missing = [document for document in documents if document["id"] not in reusable_ids]
     progress.start("Embedding and writing chunks", len(missing))
-    for batch in batches(missing, batch_size):
+    batch_total = (len(missing) + batch_size - 1) // batch_size
+    for number, batch in enumerate(batches(missing, batch_size), start=1):
         texts = [embedding_text(item["text"], item["metadata"]) for item in batch]
-        vectors = embed_documents_with_retry(embedder, texts)
-        collection.upsert(ids=[item["id"] for item in batch], documents=[item["text"] for item in batch],
-                          embeddings=vectors, metadatas=[item["metadata"] for item in batch])
+        label = f"batch {number}/{batch_total} ({len(batch)} chunks)"
+        if number == 1:
+            prefix = "\n" if sys.stderr.isatty() else ""
+            print(f"{prefix}Requesting Ollama embeddings for {label} with model {embedding_model!r}...",
+                  file=sys.stderr, flush=True)
+        try:
+            vectors = embed_documents_with_retry(embedder, texts)
+        except RuntimeError as error:
+            raise RuntimeError(f"Embedding {label} with model {embedding_model!r} failed: {error}") from error
+        if number == 1:
+            print(f"Ollama returned embeddings; writing {label} to Chroma...", file=sys.stderr, flush=True)
+        try:
+            collection.upsert(ids=[item["id"] for item in batch], documents=[item["text"] for item in batch],
+                              embeddings=vectors, metadatas=[item["metadata"] for item in batch])
+        except Exception as error:
+            raise RuntimeError(f"Chroma write failed for {label}: {error}") from error
         progress.advance(len(batch))
     progress.finish()
 

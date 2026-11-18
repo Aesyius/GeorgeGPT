@@ -1,4 +1,6 @@
 import hashlib
+from contextlib import redirect_stderr
+from io import StringIO
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -9,10 +11,49 @@ from concurrent.futures.process import BrokenProcessPool
 from unittest.mock import Mock, call, patch
 
 import chromadb
+from httpx import ReadTimeout
 
 from vectorizer.chunk_workers import iter_prepared_files, validate_chunk_workers
+from vectorizer.embeddings import create_embeddings, embed_documents_with_retry
 from vectorizer.repository_index import index_repository
 from vectorizer.source_files import discover_files
+from vectorizer.vector_store import synchronize_vectors
+
+
+class IndexDiagnosticsTest(unittest.TestCase):
+    def test_timeout_is_forwarded_and_reported(self):
+        with patch("vectorizer.embeddings.OllamaEmbeddings") as client:
+            create_embeddings("test-model", timeout_seconds=15)
+            self.assertEqual(client.call_args.kwargs["client_kwargs"], {"timeout": 15})
+        embedder = Mock()
+        embedder.embed_documents.side_effect = ReadTimeout("")
+        output = StringIO()
+        with redirect_stderr(output), patch("vectorizer.embeddings.time.sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "timed out.*ReadTimeout"):
+                embed_documents_with_retry(embedder, ["sample"], attempts=2)
+        self.assertIn("retrying in 1s", output.getvalue())
+        sleep.assert_called_once_with(1)
+
+    def test_embedding_and_chroma_failures_are_distinguished(self):
+        documents = [{"id": "first", "text": "sample", "metadata": {}}]
+        for phase in ("Ollama", "Chroma"):
+            with self.subTest(phase=phase), redirect_stderr(output := StringIO()):
+                collection, embedder = Mock(), Mock()
+                embedder.embed_documents.return_value = [[1.0, 0.0]]
+                if phase == "Ollama":
+                    embedder.embed_documents.side_effect = RuntimeError("model failed to load")
+                    expected = "Embedding batch 1/1.*model failed to load"
+                else:
+                    collection.upsert.side_effect = OSError("disk is full")
+                    expected = "Chroma write failed for batch 1/1.*disk is full"
+                with patch("vectorizer.embeddings.time.sleep"), self.assertRaisesRegex(RuntimeError, expected):
+                    synchronize_vectors(collection, documents, set(), {}, embedder, "test-model", 1, Mock())
+                self.assertIn("Requesting Ollama embeddings", output.getvalue())
+                if phase == "Ollama":
+                    self.assertNotIn("writing batch", output.getvalue())
+                    collection.upsert.assert_not_called()
+                else:
+                    self.assertIn("writing batch 1/1 (1 chunks) to Chroma", output.getvalue())
 
 
 class ChunkWorkersTest(unittest.TestCase):

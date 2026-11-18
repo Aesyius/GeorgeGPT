@@ -108,6 +108,7 @@ automatically launched Ollama remains running.
 | `--overlap N` | `180` | Character overlap for long sections. |
 | `--batch-size N` | `32` | Positive maximum chunks per embedding request for repository indexing. |
 | `--chunk-workers N` | `1` | File preparation processes for repositories only. `1` is serial; the maximum is `10`. |
+| `--embedding-timeout N` | `120` | Ollama HTTP timeout in seconds per attempt (1–3600) for repository or single-file indexing. |
 | `--max-embedding-bytes N` | `4096` | UTF-8 embedding input cap, including source context; a conservative token-size proxy. |
 
 The single-file workflow uses a fixed embedding batch size of 32 even when

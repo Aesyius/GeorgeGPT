@@ -10,7 +10,7 @@ import subprocess
 
 import chromadb
 
-from .embeddings import create_embeddings
+from .embeddings import DEFAULT_EMBEDDING_TIMEOUT, create_embeddings, validate_embedding_timeout
 from .chunking import (CHUNKING_VERSION, EMBEDDING_INPUT_VERSION, DEFAULT_EMBEDDING_BYTES,
                        embedding_metadata, validate_chunk_settings)
 from .chunk_workers import iter_prepared_files, validate_chunk_workers
@@ -70,6 +70,7 @@ def index_repository(
     batch_size: int = 32,
     max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES,
     chunk_workers: int = 1,
+    embedding_timeout_seconds: int = DEFAULT_EMBEDDING_TIMEOUT,
     progress=None,
 ) -> dict:
     """Incrementally synchronize one repository into Chroma and SQLite FTS5.
@@ -85,6 +86,7 @@ def index_repository(
         batch_size: Positive maximum chunks per embedding request.
         max_embedding_bytes: Full embedding input byte cap, including context.
         chunk_workers: Maximum file-preparation processes; 1 runs in the caller.
+        embedding_timeout_seconds: Ollama HTTP timeout in seconds for indexing.
         progress: Optional progress reporter; defaults to `common.progress.ProgressBar`.
 
     Returns:
@@ -107,6 +109,7 @@ def index_repository(
         raise ValueError("embedding batch size must be positive")
     validate_chunk_settings(chunk_size, overlap, max_embedding_bytes)
     validate_chunk_workers(chunk_workers)
+    validate_embedding_timeout(embedding_timeout_seconds)
     files = discover_files(root)
     if not files:
         raise ValueError(f"no eligible source files found under {root}")
@@ -145,12 +148,15 @@ def index_repository(
             raise ValueError(f"Collection {collection_name!r} uses {previous_model}, not {embedding_model}. "
                              "Select a matching model-specific collection; existing vectors were not modified.")
         update_collection_metadata(collection, {"index_ready": False, "managed_ready": False})
-        embedder = create_embeddings(embedding_model, ollama_url)
+        embedder = create_embeddings(embedding_model, ollama_url, timeout_seconds=embedding_timeout_seconds)
         old_ids, old_metadata = _repository_ids(collection, repo_key)
         result = synchronize_vectors(collection, prepared, old_ids, old_metadata, embedder,
                                      embedding_model, batch_size, progress)
         progress.start("Updating keyword index", 1)
-        _update_bm25(keyword_path, str(root), prepared)
+        try:
+            _update_bm25(keyword_path, str(root), prepared)
+        except Exception as error:
+            raise RuntimeError(f"Could not update SQLite keyword index {keyword_path}: {error}") from error
         progress.advance()
         progress.finish()
         # Small collection-level manifest: startup must not scan chunk metadata

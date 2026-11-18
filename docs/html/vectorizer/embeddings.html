@@ -53,6 +53,12 @@
             <h2>API Documentation</h2>
                 <ul class="memberlist">
             <li>
+                    <a class="variable" href="#DEFAULT_EMBEDDING_TIMEOUT">DEFAULT_EMBEDDING_TIMEOUT</a>
+            </li>
+            <li>
+                    <a class="function" href="#validate_embedding_timeout">validate_embedding_timeout</a>
+            </li>
+            <li>
                     <a class="function" href="#create_embeddings">create_embeddings</a>
             </li>
             <li>
@@ -86,11 +92,38 @@
 
             </section>
 
+                <section id="DEFAULT_EMBEDDING_TIMEOUT">
+                    <div class="attr variable">
+            <span class="name">DEFAULT_EMBEDDING_TIMEOUT</span>        =
+<span class="default_value">120</span>
+
+
+    </div>
+    <a class="headerlink" href="#DEFAULT_EMBEDDING_TIMEOUT"></a>
+
+
+
+                </section>
+                <section id="validate_embedding_timeout">
+                    <div class="attr function">
+
+        <span class="def">def</span>
+        <span class="name">validate_embedding_timeout</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">timeout_seconds</span><span class="p">:</span> <span class="nb">int</span></span><span class="return-annotation">) -> <span class="kc">None</span>:</span></span>
+
+
+    </div>
+    <a class="headerlink" href="#validate_embedding_timeout"></a>
+
+            <div class="docstring"><p>Raise ValueError unless the indexing request timeout is 1–3600 seconds.</p>
+</div>
+
+
+                </section>
                 <section id="create_embeddings">
                     <div class="attr function">
 
         <span class="def">def</span>
-        <span class="name">create_embeddings</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="o">*</span>,</span><span class="param">	<span class="n">keep_alive_seconds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></span><span class="return-annotation">) -> <span class="n">langchain_ollama</span><span class="o">.</span><span class="n">embeddings</span><span class="o">.</span><span class="n">OllamaEmbeddings</span>:</span></span>
+        <span class="name">create_embeddings</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="o">*</span>,</span><span class="param">	<span class="n">keep_alive_seconds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">timeout_seconds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></span><span class="return-annotation">) -> <span class="n">langchain_ollama</span><span class="o">.</span><span class="n">embeddings</span><span class="o">.</span><span class="n">OllamaEmbeddings</span>:</span></span>
 
 
     </div>
@@ -101,6 +134,7 @@
 <p>Explicit <code>model</code> and <code>base_url</code> override configured/environment defaults.
 Retention comes from <code>keep_alive_seconds</code>, then <code>OLLAMA_KEEP_ALIVE_SECONDS</code>,
 then the shared default. Returns a LangChain <code>OllamaEmbeddings</code> client.
+<code>timeout_seconds</code> sets the client HTTP timeout when supplied.
 Invalid retention raises <code>ValueError</code>; actual server/model availability is
 established when a caller makes an embedding request.</p>
 </div>

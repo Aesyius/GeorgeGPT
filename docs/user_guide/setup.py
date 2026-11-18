@@ -232,6 +232,7 @@ For other failures, use [Troubleshooting](troubleshooting.html).
 | `-NoBrowser` | Off | Do not open the browser automatically. Services and connection prompts still run. |
 | `-WhatIf` | Off | Offline preview; no installation, consent prompts, or persistent changes. |
 | `-ChunkWorkers` | `4` | Parallel file preparation processes during first-time indexing (1–10). Use `1` for serial chunking. |
+| `-EmbeddingTimeoutSeconds` | `120` | Ollama HTTP timeout in seconds per embedding attempt (1–3600). Indexing errors appear in the terminal. |
 | `-Confirm` | PowerShell default | Additional ShouldProcess confirmation before the setup action. |
 | `-Verbose` | Off | Also show detailed pip/Ollama output in the terminal. |
 

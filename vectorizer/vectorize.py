@@ -13,7 +13,7 @@ import chromadb
 
 from .chunking import DEFAULT_EMBEDDING_BYTES, embedding_metadata
 from .chunk_workers import MAX_CHUNK_WORKERS, validate_chunk_workers
-from .embeddings import create_embeddings
+from .embeddings import DEFAULT_EMBEDDING_TIMEOUT, create_embeddings, validate_embedding_timeout
 from common.model_config import resolve_embedding_model
 from common.ollama_runtime import ensure_ollama_running
 from common.paths import DEFAULT_DB_PATH, resolve_path, configured_repository
@@ -29,7 +29,8 @@ from .vector_store import (collection_documents, synchronize_vectors,
 
 def index_file(source: Path, db_path: Path, collection_name: str, embedding_model: str,
                ollama_url: str, chunk_size: int, overlap: int,
-               max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES) -> int:
+               max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES, *,
+               embedding_timeout_seconds: int = DEFAULT_EMBEDDING_TIMEOUT) -> int:
     """Index one UTF-8/BOM file and return its prepared chunk count.
 
     Takes an actual collection name and explicit model/chunking settings.
@@ -38,10 +39,12 @@ def index_file(source: Path, db_path: Path, collection_name: str, embedding_mode
     rows. Does not register a repository catalog or start Ollama itself.
 
     Empty input or a collection owned by another embedder raises `ValueError`.
+    `embedding_timeout_seconds` bounds an Ollama HTTP wait.
     Use a separate collection when changing single-file embedding models.
     Partial completed writes can remain if later work fails.
     """
     source = resolve_path(source)
+    validate_embedding_timeout(embedding_timeout_seconds)
     original = source.read_text(encoding="utf-8-sig")
     progress = ProgressBar()
     documents = chunk_file(source, source.name, chunk_size=chunk_size, overlap=overlap, text=original,
@@ -67,12 +70,16 @@ def index_file(source: Path, db_path: Path, collection_name: str, embedding_mode
             raise ValueError(f"Collection {collection_name!r} uses {previous_model}, not {embedding_model}. "
                              "Use a separate --collection for single-file indexing with a different model.")
         update_collection_metadata(collection, {"index_ready": False, "managed_ready": False})
-        embedder = create_embeddings(embedding_model, ollama_url)
+        embedder = create_embeddings(embedding_model, ollama_url, timeout_seconds=embedding_timeout_seconds)
         previous_ids, previous_metadata = _repository_ids(collection, source_id)
         synchronize_vectors(collection, prepared, previous_ids, previous_metadata, embedder,
                             embedding_model, 32, progress)
         progress.start("Updating keyword index", 1)
-        _write_bm25(_bm25_path(db_path, collection_name), collection_documents(collection))
+        keyword_path = _bm25_path(db_path, collection_name)
+        try:
+            _write_bm25(keyword_path, collection_documents(collection))
+        except Exception as error:
+            raise RuntimeError(f"Could not update SQLite keyword index {keyword_path}: {error}") from error
         progress.advance()
         progress.finish()
         update_collection_metadata(collection, {"embedding_model": embedding_model})
@@ -102,6 +109,8 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=32, help="maximum chunks per Ollama embedding request")
     parser.add_argument("--chunk-workers", type=int, default=1,
                         help=f"file preparation processes for repositories (1-{MAX_CHUNK_WORKERS}; default: 1)")
+    parser.add_argument("--embedding-timeout", type=int, default=DEFAULT_EMBEDDING_TIMEOUT,
+                        help="Ollama HTTP timeout in seconds (1-3600; default: %(default)s)")
     parser.add_argument("--max-embedding-bytes", type=int, default=DEFAULT_EMBEDDING_BYTES,
                         help="UTF-8 byte cap including source context (conservative token-size proxy)")
     args = parser.parse_args()
@@ -109,19 +118,22 @@ def main() -> None:
         parser.error("--batch-size must be positive")
     try:
         validate_chunk_workers(args.chunk_workers)
+        validate_embedding_timeout(args.embedding_timeout)
         if args.path is None:
             args.path = configured_repository()
         if not (args.path.is_dir() or args.path.is_file()):
             parser.error(f"not a repository or file: {args.path}")
         args.embedding_model = resolve_embedding_model(args.embedding_model)
         print(f"Embedding model: {args.embedding_model}", flush=True)
+        print(f"Ollama HTTP timeout: {args.embedding_timeout}s per attempt", flush=True)
         ensure_ollama_running(args.ollama_url)
         if args.path.is_dir():
             selected_collection = select_index_collection(args.db_path, args.collection, args.embedding_model)
             result = index_repository(args.path, db_path=args.db_path, collection_name=selected_collection,
                                       embedding_model=args.embedding_model, ollama_url=args.ollama_url,
                                        chunk_size=args.chunk_size, overlap=args.overlap, batch_size=args.batch_size,
-                                        max_embedding_bytes=args.max_embedding_bytes, chunk_workers=args.chunk_workers)
+                                      max_embedding_bytes=args.max_embedding_bytes, chunk_workers=args.chunk_workers,
+                                      embedding_timeout_seconds=args.embedding_timeout)
             register_index(args.db_path, args.collection, selected_collection, args.embedding_model)
             print(f"Indexed {result['files']} files / {result['chunks']} chunks ({result['embedded_chunks']} newly embedded, "
                   f"{result['reused_chunks']} reused, {result['removed_chunks']} stale removed) from {result['repository']} "
@@ -129,12 +141,13 @@ def main() -> None:
             print(f"Keyword index: {result['keyword_index']}")
         elif args.path.is_file():
             count = index_file(args.path, args.db_path, args.collection, args.embedding_model,
-                                args.ollama_url, args.chunk_size, args.overlap, args.max_embedding_bytes)
+                               args.ollama_url, args.chunk_size, args.overlap, args.max_embedding_bytes,
+                               embedding_timeout_seconds=args.embedding_timeout)
             print(f"Indexed {count} chunks from {args.path} into '{args.collection}'.")
         else:
             parser.error(f"not a repository or file: {args.path}")
     except (OSError, UnicodeError, ValueError, RuntimeError) as error:
-        parser.error(str(error))
+        parser.exit(1, f"Indexing failed: {type(error).__name__}: {error}\n")
 
 
 if __name__ == "__main__":

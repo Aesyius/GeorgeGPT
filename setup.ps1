@@ -7,7 +7,9 @@ param(
     [string]$ConfigPath,
     [switch]$NoBrowser,
     [ValidateRange(1, 10)]
-    [int]$ChunkWorkers = 4
+    [int]$ChunkWorkers = 4,
+    [ValidateRange(1, 3600)]
+    [int]$EmbeddingTimeoutSeconds = 120
 )
 
 Set-StrictMode -Version Latest
@@ -163,6 +165,7 @@ try {
     Write-Host "  Chat model:      $($models.chat_model)"
     Write-Host "  Embedding model: $($models.embedding_model)"
     Write-Host "  Chunk workers:   $ChunkWorkers"
+    Write-Host "  Embedding timeout: ${EmbeddingTimeoutSeconds}s per HTTP attempt"
     Write-Host ''
     for ($stepIndex = 0; $stepIndex -lt $script:SetupSteps.Count; $stepIndex++) {
         Write-Host ('  {0}. {1}' -f ($stepIndex + 1), $script:SetupSteps[$stepIndex])
@@ -239,12 +242,18 @@ try {
         $collection = 'repo_documents'
         if ($env:RAG_COLLECTION) { $collection = $env:RAG_COLLECTION }
         $indexOptions = @($repository, '--embedding-model', $models.embedding_model, '--ollama-url', $ollamaUrl,
-                          '--db-path', $database, '--collection', $collection, '--chunk-workers', $ChunkWorkers)
+                          '--db-path', $database, '--collection', $collection, '--chunk-workers', $ChunkWorkers,
+                          '--embedding-timeout', $EmbeddingTimeoutSeconds)
         Write-SetupStep 4
         Write-Host "Repository: $repository"
         Write-Host "Embedding model: $($models.embedding_model)"
         Write-Host 'First-time indexing may take a while. Progress will appear below.'
-        Invoke-Checked $python (@('-m', 'vectorizer.vectorize') + $indexOptions)
+        try {
+            # Keep stdout/stderr live so a waiting batch or native error is visible.
+            Invoke-Checked $python (@('-u', '-m', 'vectorizer.vectorize') + $indexOptions)
+        } catch {
+            throw "Repository indexing failed in step 4. See the vectorizer error above. $($_.Exception.Message)"
+        }
         Complete-SetupStep
 
         Write-SetupStep 5

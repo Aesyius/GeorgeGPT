@@ -221,12 +221,14 @@ function Invoke-RestMethod {{ throw 'Network probe during preview' }}
 function Invoke-Expression {{ throw 'Installer execution during preview' }}
 function Get-Command {{ throw 'Prerequisite probe during preview' }}
 & {ps_string(project / 'setup.ps1')} -RepositoryPath {ps_string(project)} -WhatIf -Verbose
-& {ps_string(project / 'setup.ps1')} -RepositoryPath {ps_string(project)} -WhatIf -ChunkWorkers 1
+& {ps_string(project / 'setup.ps1')} -RepositoryPath {ps_string(project)} -WhatIf -ChunkWorkers 1 -EmbeddingTimeoutSeconds 45
 """
         )
         self.assertIn("PREVIEW ONLY", output)
         self.assertIn("Chunk workers:   4", output)
         self.assertIn("Chunk workers:   1", output)
+        self.assertIn("Embedding timeout: 120s per HTTP attempt", output)
+        self.assertIn("Embedding timeout: 45s per HTTP attempt", output)
         self.assertEqual(before, config_file.read_bytes())
         self.assertFalse((project / "logs").exists())
         self.assertFalse((project / ".venv").exists())

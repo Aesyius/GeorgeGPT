@@ -90,7 +90,7 @@
                     <div class="attr function">
 
         <span class="def">def</span>
-        <span class="name">index_file</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">source</span><span class="p">:</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span>,</span><span class="param">	<span class="n">db_path</span><span class="p">:</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span>,</span><span class="param">	<span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span>,</span><span class="param">	<span class="n">embedding_model</span><span class="p">:</span> <span class="nb">str</span>,</span><span class="param">	<span class="n">ollama_url</span><span class="p">:</span> <span class="nb">str</span>,</span><span class="param">	<span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">overlap</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">max_embedding_bytes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4096</span></span><span class="return-annotation">) -> <span class="nb">int</span>:</span></span>
+        <span class="name">index_file</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">source</span><span class="p">:</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span>,</span><span class="param">	<span class="n">db_path</span><span class="p">:</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span>,</span><span class="param">	<span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span>,</span><span class="param">	<span class="n">embedding_model</span><span class="p">:</span> <span class="nb">str</span>,</span><span class="param">	<span class="n">ollama_url</span><span class="p">:</span> <span class="nb">str</span>,</span><span class="param">	<span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">overlap</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">max_embedding_bytes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4096</span>,</span><span class="param">	<span class="o">*</span>,</span><span class="param">	<span class="n">embedding_timeout_seconds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">120</span></span><span class="return-annotation">) -> <span class="nb">int</span>:</span></span>
 
 
     </div>
@@ -104,6 +104,7 @@ batches of 32, removes stale source vectors, and rebuilds collection BM25
 rows. Does not register a repository catalog or start Ollama itself.</p>
 
 <p>Empty input or a collection owned by another embedder raises <code>ValueError</code>.
+<code>embedding_timeout_seconds</code> bounds an Ollama HTTP wait.
 Use a separate collection when changing single-file embedding models.
 Partial completed writes can remain if later work fails.</p>
 </div>
