@@ -1,6 +1,6 @@
 # GeorgeGPT — Repository RAG Chatbot
 
-GeorgeGPT is a Portuguese-language chatbot that answers questions about your repository's code and documentation. It runs locally with **Ollama** for chat and embeddings, **Chroma** for semantic retrieval, **SQLite FTS5/BM25** for keyword retrieval, and **Open WebUI** as the chat interface.
+GeorgeGPT is a Portuguese chatbot that answers questions about your repository's code and documentation. It runs locally with **Ollama** for chat and embeddings, **Chroma** for semantic retrieval, **SQLite FTS5/BM25** for keyword retrieval, and **Open WebUI** as the chat interface.
 
 ### How it improves accuracy
 
