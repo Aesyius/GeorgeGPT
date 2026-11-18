@@ -290,6 +290,12 @@ try {
         Write-SetupStep 4
         Write-Host "Repository: $repository"
         Write-Host "Embedding model: $($models.embedding_model)"
+        try {
+            Invoke-Checked $python @('-u', '-m', 'services.index_preflight', $repository, $database,
+                                     $collection, $models.embedding_model, $ollamaUrl, $EmbeddingTimeoutSeconds)
+        } catch {
+            throw "Indexing preflight failed; the vectorizer was not started. Fix the [PREFLIGHT ERROR] issues above and retry."
+        }
         Write-Host 'First-time indexing may take a while. Progress will appear below.'
         try {
             # Keep stdout/stderr live so a waiting batch or native error is visible.

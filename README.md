@@ -148,7 +148,10 @@ py -3.12 .\services\setup_check.py --config .\config\bootup.json --repository "C
 Setup displays timestamped stages, a steps-completed progress bar, and elapsed
 times. Detailed pip/Ollama output is saved to a unique `setup-*.log` under the
 configured log directory (normally `%LOCALAPPDATA%\Vectorizer\logs`).
-Failures show recent command output and the log location. Indexing progress
+Before launching the vectorizer, setup checks source files, temporary Chroma/SQLite
+storage, and a live Ollama embedding. Fix any `[PREFLIGHT ERROR]` messages in the
+terminal before retrying. The preflight does not open the existing index.
+Other failures show recent command output and the log location. Indexing progress
 and WebUI connection prompts remain visible. `-WhatIf` creates no setup log.
 
 Use `-ConfigPath` to select another bootup configuration. If PowerShell blocks a trusted checkout, use a process-only policy bypass:

@@ -275,6 +275,20 @@ Ollama must be running; API/WebUI ports must be free.
 It launches API/WebUI and waits for connection saving. Leaving or interrupting
 setup does not shut down launched services.
 
+### services.index_preflight
+
+Setup runs this check before `vectorizer.vectorize`. It reports unreadable or
+empty source files, tests Chroma and SQLite FTS5 in temporary storage, and sends
+one test embedding to Ollama. The existing index is not opened. A failed check
+prints `[PREFLIGHT ERROR]` and returns exit code 1.
+
+```powershell
+.\.venv\Scripts\python.exe -m services.index_preflight "C:\Repos\MyProject" ".\chroma_db" repo_documents qwen3-embedding:4B http://127.0.0.1:11434 120
+```
+
+The positional arguments are repository, database directory, collection,
+embedding model, Ollama URL, and timeout in seconds.
+
 ### services.index_preparation
 
 Bootup helper that prepares the selected model's index, echoes progress to
