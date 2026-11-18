@@ -44,6 +44,7 @@ class SetupOutputTests(unittest.TestCase):
         harness.write_text(
             "$ErrorActionPreference = 'Stop'\nSet-StrictMode -Version Latest\n"
             f". {ps_string(ROOT / 'services' / 'setup_output.ps1')}\n"
+            f". {ps_string(ROOT / 'services' / 'setup_ollama.ps1')}\n"
             "Initialize-SetupOutput\n"
             f"$script:SetupLog = {ps_string(self.log)}\n"
             f"$python = {ps_string(sys.executable)}\n"
@@ -62,7 +63,7 @@ class SetupOutputTests(unittest.TestCase):
     def test_powershell_syntax(self):
         self.run_ps(
             """
-foreach ($file in @('setup.ps1', 'services/setup_output.ps1')) {
+foreach ($file in @('setup.ps1', 'services/setup_output.ps1', 'services/setup_ollama.ps1')) {
     $tokens = $null
     $parseErrors = $null
     $null = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -71,6 +72,40 @@ foreach ($file in @('setup.ps1', 'services/setup_output.ps1')) {
 }
 """
         )
+
+    def test_setup_reports_original_error_without_formatting_failure(self):
+        missing = self.directory / "missing-repository"
+        result = subprocess.run(
+            [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy",
+             "Bypass", "-File", str(ROOT / "setup.ps1"),
+             "-RepositoryPath", str(missing), "-WhatIf"],
+            cwd=ROOT, capture_output=True, text=True, timeout=60,
+        )
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, output)
+        self.assertRegex(output, r"\[\d{2}:\d{2}:\d{2}\] \[ERROR\] First-time setup failed:")
+        self.assertIn("missing-repository", output)
+        self.assertNotIn("FormatError", output)
+        self.assertNotIn("Error formatting a string", output)
+
+    def test_initial_prompt_retries_invalid_input_and_cancels_before_checks(self):
+        output = self.run_ps(
+            """
+$global:promptCount = 0
+function Read-Host {
+    param($Prompt)
+    $global:promptCount++
+    if ($global:promptCount -eq 1) { return 'invalid' }
+    return 'n'
+}
+function Get-Command { throw 'Prerequisite check ran after cancellation' }
+& (Join-Path $PWD 'setup.ps1') -RepositoryPath 'nonexistent-cancelled-repository'
+if ($global:promptCount -ne 2) { throw 'Invalid input was not retried' }
+"""
+        )
+        self.assertIn("[CANCELLED]", output)
+        self.assertIn("No installation or configuration changes were made.", output)
+        self.assertFalse(self.log.exists())
 
     def test_quiet_logs_stdout_and_stderr_without_terminal_noise(self):
         output = self.run_ps(
@@ -168,6 +203,7 @@ Complete-SetupStep
         (project / "config").mkdir()
         shutil.copyfile(ROOT / "setup.ps1", project / "setup.ps1")
         shutil.copyfile(ROOT / "services/setup_output.ps1", project / "services/setup_output.ps1")
+        shutil.copyfile(ROOT / "services/setup_ollama.ps1", project / "services/setup_ollama.ps1")
         shutil.copyfile(ROOT / "config/models.json", project / "config/models.json")
         config = {
             "models_config": "config/models.json",
@@ -235,6 +271,8 @@ $consent = New-Object PSObject
 $consent | Add-Member ScriptMethod ShouldProcess { param($target, $action) return $script:approve }
 $config = @{ollama = @{host = '127.0.0.1'; port = 11434}}
 $ollama = 'mock-ollama.exe'
+$logsDirectory = 'unused-mock-directory'
+function Start-SetupOllama { param($Executable, $BaseUrl, $LogsDirectory) }
 $originalHost = $env:OLLAMA_HOST
 try {
     foreach ($case in @('yes', 'no', 'invalid', 'cancelled', 'missing', 'existing')) {
@@ -265,6 +303,127 @@ try {
         )
         for case in ("yes", "no", "invalid", "cancelled", "missing", "existing"):
             self.assertIn(f"PASS: {case}", output)
+
+    def test_post_install_reuses_running_ollama_without_prompt(self):
+        output = self.run_ps(
+            """
+function Invoke-RestMethod { param($Uri, $TimeoutSec) return @{models = @()} }
+function Read-Host { throw 'Unexpected start prompt' }
+function Start-Process { throw 'Unexpected process launch' }
+Start-SetupOllama -Executable 'mock-ollama.exe' -BaseUrl 'http://127.0.0.1:11434' -LogsDirectory (Split-Path $script:SetupLog)
+"""
+        )
+        self.assertIn("already running", output)
+
+    def test_post_install_decline_does_not_launch(self):
+        output = self.run_ps(
+            """
+function Invoke-RestMethod { param($Uri, $TimeoutSec) throw 'Not ready' }
+function Read-Host { param($Prompt) return 'N' }
+function Start-Process { throw 'Unexpected process launch' }
+$caught = $false
+try {
+    Start-SetupOllama -Executable 'mock-ollama.exe' -BaseUrl 'http://localhost:11434' -LogsDirectory (Split-Path $script:SetupLog)
+} catch {
+    $caught = $_.Exception.Message -match 'startup declined'
+}
+if (-not $caught) { throw 'Expected manual-start instructions' }
+"""
+        )
+        self.assertIn("installation completed", output)
+
+    def test_post_install_starts_loopback_waits_and_restores_host(self):
+        output = self.run_ps(
+            """
+$script:probes = 0
+$script:prompts = 0
+$script:launched = 0
+$script:disposed = $false
+function Invoke-RestMethod {
+    param($Uri, $TimeoutSec)
+    $script:probes++
+    if ($script:probes -eq 1) { throw 'Not started' }
+    if ($Uri -ne 'http://127.0.0.1:11434/api/tags') { throw 'Unexpected readiness endpoint' }
+    return @{models = @()}
+}
+function Read-Host {
+    param($Prompt)
+    $script:prompts++
+    if ($script:prompts -eq 1) { return 'invalid' }
+    return 'y'
+}
+function Start-Process {
+    param($FilePath, $ArgumentList, $WindowStyle, [switch]$PassThru,
+          $RedirectStandardOutput, $RedirectStandardError)
+    if ($env:OLLAMA_HOST -ne 'http://127.0.0.1:11434') { throw 'Host is not loopback' }
+    if ($ArgumentList -ne 'serve') { throw 'Expected serve command' }
+    $script:launched++
+    $process = [pscustomobject]@{HasExited = $false}
+    $process | Add-Member ScriptMethod Dispose { $script:disposed = $true }
+    return $process
+}
+$env:OLLAMA_HOST = 'original-host'
+Start-SetupOllama -Executable 'mock-ollama.exe' -BaseUrl 'http://127.0.0.1:11434' -LogsDirectory (Split-Path $script:SetupLog)
+if ($env:OLLAMA_HOST -ne 'original-host') { throw 'Host override leaked' }
+if ($script:launched -ne 1 -or $script:prompts -ne 2) { throw 'Incorrect launch/prompt count' }
+if (-not $script:disposed) { throw 'Process handle leaked' }
+"""
+        )
+        self.assertIn("Ollama is ready", output)
+
+    def test_post_install_failure_restores_host(self):
+        self.run_ps(
+            """
+function Invoke-RestMethod { param($Uri, $TimeoutSec) throw 'Not ready' }
+function Read-Host { param($Prompt) return 'Y' }
+function Start-Process { throw 'Mock launch failure' }
+$env:OLLAMA_HOST = 'original-host'
+$caught = $false
+try {
+    Start-SetupOllama -Executable 'mock-ollama.exe' -BaseUrl 'http://localhost:11434' -LogsDirectory (Split-Path $script:SetupLog)
+} catch { $caught = $_.Exception.Message -match 'Mock launch failure' }
+if (-not $caught) { throw 'Launch failure was hidden' }
+if ($env:OLLAMA_HOST -ne 'original-host') { throw 'Host override leaked' }
+"""
+        )
+
+    def test_post_install_detects_exit_and_timeout(self):
+        self.run_ps(
+            """
+function Invoke-RestMethod { param($Uri, $TimeoutSec) throw 'Not ready' }
+function Read-Host { param($Prompt) return 'Y' }
+function Start-Process {
+    param($FilePath, $ArgumentList, $WindowStyle, [switch]$PassThru,
+          $RedirectStandardOutput, $RedirectStandardError)
+    $process = [pscustomobject]@{HasExited = $script:exited}
+    $process | Add-Member ScriptMethod Dispose {}
+    return $process
+}
+foreach ($exited in @($true, $false)) {
+    $script:exited = $exited
+    $caught = $false
+    try {
+        Start-SetupOllama -Executable 'mock-ollama.exe' -BaseUrl 'http://127.0.0.1:11434' -LogsDirectory (Split-Path $script:SetupLog) -TimeoutSeconds 1
+    } catch {
+        $pattern = if ($exited) { 'exited before becoming ready' } else { 'did not become ready within' }
+        $caught = $_.Exception.Message -match $pattern
+    }
+    if (-not $caught) { throw 'Missing startup failure diagnostic' }
+}
+"""
+        )
+
+    def test_post_install_rejects_nonlocal_endpoint_before_probing(self):
+        self.run_ps(
+            """
+function Invoke-RestMethod { throw 'Unexpected remote probe' }
+$caught = $false
+try {
+    Start-SetupOllama -Executable 'mock-ollama.exe' -BaseUrl 'http://0.0.0.0:11434' -LogsDirectory (Split-Path $script:SetupLog)
+} catch { $caught = $_.Exception.Message -match 'loopback' }
+if (-not $caught) { throw 'Nonlocal endpoint accepted' }
+"""
+        )
 
 
 if __name__ == "__main__":

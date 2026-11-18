@@ -13,16 +13,32 @@ class BootError(RuntimeError):
 
 
 def expand_path(value: str, root: Path) -> Path:
+    """Expand environment variables and resolve a service path relative to `root`.
+
+    Absolute paths are retained. Does not create or require the destination.
+    Unlike `common.paths.resolve_path`, this helper does not expand `~`.
+    """
     path = Path(os.path.expandvars(value))
     return (path if path.is_absolute() else root / path).resolve()
 
 
 def service_url(service: dict) -> str:
+    """Format an HTTP base URL from a service mapping's `host` and `port`.
+
+    Formatting does not validate loopback safety; call `validate_local_services`
+    before using managed service settings.
+    """
     return f"http://{service['host']}:{int(service['port'])}"
 
 
 def validate_local_services(config: dict) -> None:
-    """These are loopback-only listeners, never public/network interfaces."""
+    """Validate managed listeners, distinct ports, and the saved-connection URL.
+
+    Ollama/API/WebUI hosts must be `127.0.0.1` or `localhost`; ports must be
+    distinct integers in 1–65535. The OpenAI base URL must match the API endpoint
+    plus `/v1`. Raises `BootError` on unsafe/inconsistent values. Performs no
+    socket probes, firewall changes, or service launches.
+    """
     ports = []
     for section in ("ollama", "rag_api", "open_webui"):
         service = config[section]
@@ -39,7 +55,12 @@ def validate_local_services(config: dict) -> None:
 
 
 def validate_webui_storage(config: dict, root: Path) -> None:
-    """Reject inherited database overrides rather than touch another app's data."""
+    """Reject inherited WebUI storage settings that conflict with local SQLite.
+
+    Compares `DATA_DIR`/`DATABASE_*` environment settings with the configured
+    WebUI database path. Raises `BootError` instead of silently redirecting,
+    migrating, resetting, or contacting another application's database.
+    """
     database = expand_path(config["rag_api"]["open_webui_database"], root)
     data_dir = os.getenv("DATA_DIR")
     if data_dir and expand_path(data_dir, root) != database.parent:
@@ -55,6 +76,12 @@ def validate_webui_storage(config: dict, root: Path) -> None:
 
 @dataclass(frozen=True)
 class StartupSettings:
+    """Resolved project/model/log paths and timing settings for one managed launch.
+
+    Created by `from_config` after local-listener and storage validation.
+    Holds immutable settings only; constructing it does not start processes,
+    probe ports, prepare an index, or mutate credentials.
+    """
     root: Path
     models_path: Path
     models: ModelSettings
@@ -65,6 +92,14 @@ class StartupSettings:
 
     @classmethod
     def from_config(cls, config: dict, root: Path, *, repository: Path | None = None) -> "StartupSettings":
+        """Validate a bootup mapping and resolve paths/models for this machine.
+
+        `root` anchors relative service paths. An explicit `repository` wins
+        over configured/environment source resolution. Model JSON is read
+        directly, deliberately ignoring standalone model overrides. Positive
+        startup/poll timing values are required. Raises `BootError` for unsafe
+        service/storage settings and `ValueError` for invalid models/timing.
+        """
         validate_local_services(config)
         validate_webui_storage(config, root)
         timeout = int(config.get("startup_timeout_seconds", 240))

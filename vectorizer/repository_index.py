@@ -31,7 +31,13 @@ def _hash(value: str) -> str:
 def repository_chunk_id(repo_key: str, embedding_model: str, relative: str,
                         chunk_size: int, overlap: int, content_hash: str, index: int,
                         max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES) -> str:
-    """Stable ID shared by indexing and read-only index verification."""
+    """Build a deterministic chunk ID for indexing and integrity comparison.
+
+    Combines repository identity, embedding model, relative path, source content
+    hash, chunk index, and chunking/embedding-input settings. Changing any of
+    those inputs can invalidate reuse. This is a pure naming operation; it
+    neither reads files nor creates vectors.
+    """
     model_key = _hash(embedding_model)[:8]
     chunking_key = f"{CHUNKING_VERSION}:{EMBEDDING_INPUT_VERSION}:{chunk_size}:{overlap}:{max_embedding_bytes}"
     path_key = _hash(relative + chr(0) + chunking_key)[:12]
@@ -64,7 +70,31 @@ def index_repository(
     max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES,
     progress=None,
 ) -> dict:
-    """Index a repository; publish new snapshot IDs before removing its old snapshot."""
+    """Incrementally synchronize one repository into Chroma and SQLite FTS5.
+
+    Args:
+        repository: Source directory, or the configured repository when omitted.
+        db_path: Persistent database directory; explicit relative paths use cwd.
+        collection_name: Actual destination collection, not a model-catalog lookup.
+        embedding_model: Ollama embedding tag; omitted values use shared settings.
+        ollama_url: Optional embedding endpoint override.
+        chunk_size: Structural chunk character cap.
+        overlap: Character overlap for long sections.
+        batch_size: Positive maximum chunks per embedding request.
+        max_embedding_bytes: Full embedding input byte cap, including context.
+        progress: Optional progress reporter; defaults to `common.progress.ProgressBar`.
+
+    Returns:
+        Repository/revision, file/chunk counts, embedded/reused/removed counts,
+        selected collection, and keyword-index path.
+
+    Discovers eligible files, skips unreadable/undecodable text, reuses compatible
+    vectors, embeds changed chunks, removes stale source chunks, and replaces
+    this repository's keyword rows. Readiness metadata is published after both
+    stores succeed. This is not a cross-store transaction: failed runs may retain
+    completed batches for retry. Existing incompatible-model vectors are refused.
+    Does not start Ollama, pull models, or register a base catalog on its own.
+    """
     embedding_model = resolve_embedding_model(embedding_model)
     root = configured_repository() if repository is None else resolve_path(repository)
     db_dir = resolve_path(db_path)

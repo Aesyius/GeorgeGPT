@@ -41,8 +41,10 @@ On **Windows 10/11 (64-bit)** with **PowerShell 5.1 or newer**, install:
 
 If Ollama is missing, `setup.ps1` offers to run
 `irm https://ollama.com/install.ps1 | iex` after a **Y/N** consent prompt.
-Only **Y** runs the downloaded installer; **N** stops setup. If needed, start
-Ollama after installation and retry setup. `-WhatIf` never runs the installer.
+Only **Y** runs the downloaded installer; **N** stops setup. After installation,
+setup reuses a running Ollama server or asks **Start Ollama now? Press Y/N**.
+**Y** starts the loopback-only server and waits for readiness; **N** stops setup
+so you can start Ollama manually. `-WhatIf` never installs or starts Ollama.
 
 Download and extract this repository to a short, writable path such as
 `C:\Projects\GeorgeGPT`, or clone it:

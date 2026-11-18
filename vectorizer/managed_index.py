@@ -89,9 +89,23 @@ def prepare_index(db_path: str | Path, base_collection: str, embedding_model: st
                   ollama_url: str, repository: str | Path | None = None) -> str:
     """Reuse only a completed matching index, or resume/build one before serving.
 
+    Args:
+        db_path: Persistent Chroma/keyword storage directory.
+        base_collection: Catalog collection name used to select model indexes.
+        embedding_model: Exact embedding model tag for the requested snapshot.
+        ollama_url: Embedding endpoint used if a build is necessary.
+        repository: Optional source override; otherwise use catalog/config sources.
+
+    Returns:
+        The actual prepared collection name, ready for retriever construction.
+
     Collection-level manifests are constant-size startup reads. Legacy indexes
     without a manifest use bootup.json's repository_path, or an explicit
     RAG_REPOSITORY_PATH; their vectors and keyword indexes are never rewritten.
+    A SQLite cross-process lock serializes preparation. A needed build reads
+    source files, calls Ollama, writes vectors/BM25, and publishes completion
+    only afterward. Existing model indexes are preserved. Missing source roots
+    or an empty result raise `ValueError`; storage/embedding errors propagate.
     """
     db_path = resolve_path(db_path)
     db_path.mkdir(parents=True, exist_ok=True)
@@ -138,7 +152,13 @@ def prepare_index(db_path: str | Path, base_collection: str, embedding_model: st
 
 
 def main() -> None:
-    """Bootup preflight: indexing is not bounded by the HTTP readiness timeout."""
+    """Prepare an index from environment/configuration defaults for bootup.
+
+    Reads the selected models, database, base collection, Ollama URL, and
+    repository, then calls `prepare_index`. This entry point has no argument
+    parser: even `--help` is not a supported preview. Preparation may write data
+    and is separate from the service HTTP readiness timeout.
+    """
     logging.basicConfig(level=logging.INFO)
     settings = ModelSettings.from_env()
     prepare_index(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH)),

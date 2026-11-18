@@ -14,6 +14,13 @@ from services.service_config import BootError, StartupSettings
 
 
 def check_setup(config_path: Path, repository: Path) -> StartupSettings:
+    """Validate setup configuration for a source directory without installing anything.
+
+    Reads bootup/model JSON, substitutes the supplied repository in memory,
+    checks directory existence, and returns validated `StartupSettings`.
+    Does not persist that override, probe services, import runtime dependencies,
+    or create environments/databases. Validation and file errors propagate.
+    """
     config = json.loads(config_path.read_text(encoding="utf-8-sig"))
     if not repository.is_dir():
         raise ValueError(f"Repository is not a directory: {repository}")
@@ -22,6 +29,11 @@ def check_setup(config_path: Path, repository: Path) -> StartupSettings:
 
 
 def main() -> int:
+    """Run standard-library setup checks for Python 3.12/64-bit and local settings.
+
+    Requires `--config` and `--repository`. Prints confirmation and returns 0,
+    or prints a handled validation error to stderr and returns 1.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, type=resolve_path)
     parser.add_argument("--repository", required=True, type=resolve_path)

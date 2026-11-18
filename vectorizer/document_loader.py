@@ -13,7 +13,14 @@ def load_and_split_text(
     chunk_size: int = 1000,
     chunk_overlap: int = 150,
 ) -> list[Document]:
-    """Read a UTF-8 text file and return chunks with source/start metadata."""
+    """Load one UTF-8/BOM file into recursively split LangChain documents.
+
+    `chunk_size` and `chunk_overlap` are character-based limits. Returned
+    documents retain the absolute source path and starting character index.
+    This compatibility loader does not perform repository discovery, structural
+    chunking, embedding, or persistence. Invalid limits raise `ValueError`;
+    filesystem and decoding errors propagate.
+    """
     if chunk_size < 1 or chunk_overlap < 0 or chunk_overlap >= chunk_size:
         raise ValueError("chunk size must be positive and overlap must be non-negative and smaller than chunk size")
 

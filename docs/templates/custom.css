@@ -42,3 +42,157 @@
 .site-top {
     margin-top: 1.5rem;
 }
+
+/* Comfortable reading defaults shared by guide and API pages. */
+html {
+    scroll-padding-top: 1.5rem;
+}
+main.pdoc {
+    font-size: 1rem;
+    line-height: 1.75;
+}
+main.pdoc .docstring {
+    max-width: 80ch;
+}
+main.pdoc .docstring > p {
+    margin-bottom: 1.15rem;
+}
+main.pdoc .docstring h1 {
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    line-height: 1.2;
+    margin-bottom: 1.5rem;
+}
+main.pdoc .docstring h2 {
+    font-size: 1.45rem;
+    line-height: 1.35;
+    margin: 2.75rem 0 1.1rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--accent2);
+    scroll-margin-top: 1rem;
+}
+main.pdoc .docstring h3 {
+    font-size: 1.15rem;
+    line-height: 1.4;
+    margin: 1.75rem 0 .8rem;
+}
+main.pdoc .docstring li {
+    margin-bottom: .55rem;
+    padding-left: .2rem;
+}
+main.pdoc .docstring ol,
+main.pdoc .docstring ul {
+    padding-left: 1.6rem;
+    margin-bottom: 1.4rem;
+}
+main.pdoc .docstring li::marker {
+    color: var(--link);
+    font-weight: 700;
+}
+main.pdoc .docstring p > code,
+main.pdoc .docstring li > code,
+main.pdoc .docstring td > code {
+    overflow-wrap: anywhere;
+}
+main.pdoc .pdoc-code pre {
+    font-size: .9rem;
+    line-height: 1.65;
+    border: 1px solid var(--accent2);
+    border-left: 4px solid var(--link);
+    border-radius: .35rem;
+    padding: 1rem 1.15rem;
+    margin: 1.25rem 0 1.5rem;
+    overflow-x: auto;
+    tab-size: 4;
+}
+main.pdoc .docstring table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-size: .94rem;
+    line-height: 1.6;
+    margin: 1.25rem 0 1.75rem;
+}
+main.pdoc .docstring th,
+main.pdoc .docstring td {
+    padding: .8rem 1rem;
+    vertical-align: top;
+    border: 1px solid var(--accent2);
+    min-width: 9rem;
+}
+main.pdoc .docstring th {
+    background: var(--accent);
+    font-weight: 700;
+    text-align: left;
+}
+main.pdoc .docstring tbody tr:nth-child(even) {
+    background: var(--code);
+}
+main.pdoc .docstring blockquote {
+    border-left: 4px solid var(--link);
+    background: var(--code);
+    padding: 1rem 1.2rem;
+    margin: 1.5rem 0;
+}
+main.pdoc .docstring blockquote p:last-child {
+    margin-bottom: 0;
+}
+.doc-breadcrumb {
+    color: var(--muted);
+    font-size: .85rem;
+    margin-bottom: 1.5rem;
+}
+.skip-content {
+    position: absolute;
+    left: -10000px;
+}
+.skip-content:focus {
+    position: static;
+    display: block;
+    padding: .75rem;
+    background: var(--active);
+}
+.pdoc a:focus-visible,
+.pdoc summary:focus-visible {
+    outline: 3px solid var(--link);
+    outline-offset: 3px;
+}
+@media (max-width: 769px) {
+    main.pdoc {
+        padding: 2rem 1.15rem;
+    }
+    main.pdoc .docstring th,
+    main.pdoc .docstring td {
+        padding: .65rem .75rem;
+    }
+    .guide-pagination a {
+        flex: 1 1 100%;
+    }
+}
+@media print {
+    nav.pdoc,
+    .guide-pagination,
+    .skip-content {
+        display: none !important;
+    }
+    main.pdoc {
+        width: 100%;
+        padding: 0;
+        font-size: 11pt;
+        color: #000;
+    }
+    main.pdoc .docstring {
+        max-width: none;
+    }
+    main.pdoc .docstring h2,
+    main.pdoc .docstring h3 {
+        break-after: avoid;
+    }
+    main.pdoc .pdoc-code pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+    main.pdoc .docstring table {
+        display: table;
+    }
+}

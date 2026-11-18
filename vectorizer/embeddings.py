@@ -13,7 +13,14 @@ def create_embeddings(
     base_url: str | None = None,
     *, keep_alive_seconds: int | None = None,
 ) -> OllamaEmbeddings:
-    """Create the Ollama embedding client used for both documents and queries."""
+    """Configure the shared Ollama embedding client without embedding any text.
+
+    Explicit `model` and `base_url` override configured/environment defaults.
+    Retention comes from `keep_alive_seconds`, then `OLLAMA_KEEP_ALIVE_SECONDS`,
+    then the shared default. Returns a LangChain `OllamaEmbeddings` client.
+    Invalid retention raises `ValueError`; actual server/model availability is
+    established when a caller makes an embedding request.
+    """
     if keep_alive_seconds is None:
         keep_alive_seconds = int(os.getenv("OLLAMA_KEEP_ALIVE_SECONDS", str(DEFAULT_KEEP_ALIVE_SECONDS)))
     validate_keep_alive(keep_alive_seconds)
@@ -25,7 +32,14 @@ def create_embeddings(
 
 
 def embed_documents_with_retry(embedder: OllamaEmbeddings, texts: list[str], attempts: int = 3) -> list[list[float]]:
-    """Retry transient Ollama runner failures without discarding completed batches."""
+    """Embed one text batch with bounded retries and exponential backoff.
+
+    Returns vectors in the embedder's input order. Each failed attempt is logged
+    to stderr; delays are 1, 2, 4, ... seconds. All embedder exceptions are retried,
+    not just network failures. `attempts` must be positive. Exhaustion raises
+    `RuntimeError` chained from the last error. Persistence is the caller's job,
+    so earlier successfully stored batches are not rolled back.
+    """
     if attempts < 1:
         raise ValueError("attempts must be positive")
     for attempt in range(1, attempts + 1):

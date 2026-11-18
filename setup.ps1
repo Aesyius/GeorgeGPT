@@ -11,6 +11,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'services\setup_output.ps1')
+. (Join-Path $PSScriptRoot 'services\setup_ollama.ps1')
 Initialize-SetupOutput ($VerbosePreference -eq 'Continue')
 
 function Resolve-ProjectPath([string]$Value) {
@@ -48,6 +49,17 @@ try {
 
 ============================================================
 '@ -ForegroundColor Yellow
+    if (-not $WhatIfPreference) {
+        Write-Host ''
+        do {
+            $continueSetup = (Read-Host 'Continue with installation? Press Y/N').Trim()
+        } while ($continueSetup -notin @('Y', 'N'))
+        if ($continueSetup -ne 'Y') {
+            Write-SetupStatus 'Setup cancelled. No installation or configuration changes were made.' 'CANCELLED' Yellow
+            return
+        }
+        Write-Host ''
+    }
     if ([string]::IsNullOrWhiteSpace($ConfigPath)) { $ConfigPath = Join-Path $PSScriptRoot 'config\bootup.json' }
     $repository = (Resolve-Path -LiteralPath $RepositoryPath).Path
     if (-not (Test-Path -LiteralPath $repository -PathType Container)) { throw 'RepositoryPath must be a directory.' }
@@ -125,6 +137,8 @@ try {
             if (-not (Test-Path -LiteralPath $ollama -PathType Leaf)) {
                 throw 'Ollama installer finished, but the configured executable is still missing. Check the installation and ollama.executable in config/bootup.json, then rerun setup.'
             }
+            Start-SetupOllama -Executable $ollama `
+                -BaseUrl "http://$($config.ollama.host):$($config.ollama.port)" -LogsDirectory $logsDirectory
         }
         $ollamaUrl = "http://$($config.ollama.host):$($config.ollama.port)"
         try { $tags = Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 5 }
@@ -257,7 +271,8 @@ try {
 } catch {
     $failure = $_.Exception.Message
     Complete-SetupStep -Failed
-    [Console]::Error.WriteLine("[{0}] [ERROR] First-time setup failed: {1}" -f (Get-Date -Format 'HH:mm:ss'), $failure)
+    $timestamp = Get-Date -Format 'HH:mm:ss'
+    [Console]::Error.WriteLine("[$timestamp] [ERROR] First-time setup failed: $failure")
     exit 1
 } finally {
     if ($null -ne $script:SetupTimer) {

@@ -12,11 +12,22 @@ class CompletionLease:
     """Release exactly once, including from Starlette's background worker thread."""
 
     def __init__(self, queue: "CompletionQueue"):
+        """Associate a held generation slot with an idempotent release guard.
+
+        Construct leases through `CompletionQueue.acquire`; construction alone
+        does not acquire or reserve a queue position.
+        """
         self._queue = queue
         self._guard = threading.Lock()
         self._released = False
 
     def release(self) -> None:
+        """Return this lease's slot once, scheduling onto the owning event loop.
+
+        Safe to call repeatedly and from worker threads. If the owning loop is
+        already closed, no callback is scheduled. Does not wait for model work
+        to finish; callers release only when their generation/stream is done.
+        """
         with self._guard:
             if self._released:
                 return
@@ -39,6 +50,12 @@ class CompletionQueue:
     """
 
     def __init__(self, max_waiting: int = 4, wait_timeout: float = 90):
+        """Create a single-generation queue on the current running asyncio loop.
+
+        `max_waiting` excludes the active generation; `wait_timeout` is the
+        positive admission wait in seconds. Invalid limits raise `ValueError`;
+        construction outside a running event loop raises `RuntimeError`.
+        """
         if max_waiting < 0 or wait_timeout <= 0:
             raise ValueError("max_waiting must be nonnegative and wait_timeout positive")
         self.loop = asyncio.get_running_loop()
@@ -48,6 +65,13 @@ class CompletionQueue:
         self._wait_timeout = wait_timeout
 
     async def acquire(self) -> CompletionLease:
+        """Wait FIFO for generation access and return its releasable lease.
+
+        Raises `CompletionQueueFull` when active plus waiting capacity is full,
+        or `TimeoutError` when the wait expires. Cancellation/timeout returns
+        admission capacity automatically. A successful caller must release the
+        returned lease, including when a streaming response fails or disconnects.
+        """
         if self._admitted >= self._capacity:
             raise CompletionQueueFull("Completion queue is full")
         self._admitted += 1

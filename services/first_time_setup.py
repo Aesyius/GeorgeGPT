@@ -21,7 +21,13 @@ from .windows_processes import hidden_startupinfo, listener_pids
 
 
 def bootstrap_key(config: dict, root: Path) -> str:
-    """Reuse saved keys; never replace an existing key or ignore a mismatch."""
+    """Reuse a saved API key or create an in-memory first-time bootstrap secret.
+
+    Only `ConnectionNotConfigured` permits fallback to a supplied environment
+    key (at least 32 characters) or a cryptographically random generated key.
+    Existing-key mismatches remain errors. Does not persist or print the secret;
+    the user saves it through WebUI's connection settings.
+    """
     try:
         return read_api_key(config, root)
     except ConnectionNotConfigured:
@@ -32,7 +38,12 @@ def bootstrap_key(config: dict, root: Path) -> str:
 
 
 def copy_key_to_clipboard(key: str) -> None:
-    """Only called after explicit consent; the secret is stdin, never argv/logs."""
+    """Copy the supplied key to the Windows clipboard using subprocess stdin.
+
+    The caller must obtain explicit user consent first; this helper does not
+    prompt. The secret is not placed in argv/logs. Clipboard contents may be
+    shared outside the application. PowerShell failure/timeout propagates.
+    """
     subprocess.run(
         ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "$input | Set-Clipboard"],
         input=key, text=True, capture_output=True, check=True, timeout=15,
@@ -41,7 +52,14 @@ def copy_key_to_clipboard(key: str) -> None:
 
 
 def wait_for_saved_connection(config: dict, root: Path, key: str, *, read_input=input) -> None:
-    """Registration and connection saving stay in WebUI, not direct SQL writes."""
+    """Prompt until WebUI contains the expected saved connection key.
+
+    Reads the connection via `read_api_key` and compares secrets in constant
+    time. Enter retries, C copies the key after explicit input, and Q raises
+    `BootError` without stopping launched services. `read_input` is injectable
+    for tests. Account creation and persistence remain WebUI operations; no
+    direct configuration SQL writes are performed.
+    """
     print("Create your administrator account in WebUI, then open Admin Settings > Connections.")
     print(f"Save an OpenAI-compatible connection: {config['rag_api']['openai_base_url']}")
     print("The API key is supplied to WebUI at launch. Keep WebUI Knowledge disabled; select GeorgeGPT.")
@@ -62,6 +80,15 @@ def wait_for_saved_connection(config: dict, root: Path, key: str, *, read_input=
 
 
 def bootstrap(config: dict, root: Path, *, open_browser: bool = True) -> None:
+    """Launch the initial API/WebUI pair and guide the user through connection saving.
+
+    Requires installed dependencies, running Ollama, and pulled chat/embedding
+    models. Validates settings and free API/WebUI ports, obtains a bootstrap key,
+    warms models, prepares/starts the API, and launches WebUI. `open_browser`
+    controls only automatic browser opening, not prompts or service startup.
+    Waits for the saved key before reporting completion. Failures do not roll
+    back installed data or stop services that were already launched.
+    """
     settings = StartupSettings.from_config(config, root)
     for section in ("rag_api", "open_webui"):
         if listener_pids(config[section]["port"]):
@@ -83,6 +110,12 @@ def bootstrap(config: dict, root: Path, *, open_browser: bool = True) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run first-time bootstrap with `--config` and optional `--no-browser`.
+
+    Uses `argv` when supplied, otherwise the current command line. Returns 0 on
+    completion or 1 for handled setup/interrupt failures, explaining that any
+    launched services remain running. Does not install packages or pull models.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "config" / "bootup.json")
     parser.add_argument("--no-browser", action="store_true")

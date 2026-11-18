@@ -29,7 +29,17 @@ from .vector_store import (collection_documents, synchronize_vectors,
 def index_file(source: Path, db_path: Path, collection_name: str, embedding_model: str,
                ollama_url: str, chunk_size: int, overlap: int,
                max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES) -> int:
-    """Retain the original single-text-file workflow, with source citations/BM25."""
+    """Index one UTF-8/BOM file and return its prepared chunk count.
+
+    Takes an actual collection name and explicit model/chunking settings.
+    Reuses compatible vectors for this source, embeds missing chunks in fixed
+    batches of 32, removes stale source vectors, and rebuilds collection BM25
+    rows. Does not register a repository catalog or start Ollama itself.
+
+    Empty input or a collection owned by another embedder raises `ValueError`.
+    Use a separate collection when changing single-file embedding models.
+    Partial completed writes can remain if later work fails.
+    """
     source = resolve_path(source)
     original = source.read_text(encoding="utf-8-sig")
     progress = ProgressBar()
@@ -69,6 +79,14 @@ def index_file(source: Path, db_path: Path, collection_name: str, embedding_mode
 
 
 def main() -> None:
+    """Parse indexing CLI options and dispatch directory or single-file indexing.
+
+    Resolves default repository/model settings, ensures Ollama is reachable
+    (starting local HTTP Ollama when possible), and prints an indexing summary.
+    Directory runs select/register model-specific catalog entries. Single-file
+    runs use the requested collection directly. `--help` lists all options;
+    handled validation/operational failures are reported through argparse.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=resolve_path, default=None,
                         help="repository directory or UTF-8 file (default: repository_path in config/bootup.json)")

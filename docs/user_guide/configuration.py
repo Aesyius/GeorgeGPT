@@ -51,6 +51,63 @@ The API itself exposes the fixed model ID `GeorgeGPT`; leave `model_id` unchange
 Setup only manages the project `.venv` and `.venv-webui`; custom configured
 interpreter paths require manual environment management.
 
+## Port conflicts and changing the default ports
+
+A port conflict means another process is already listening on a port GeorgeGPT
+needs. The defaults are **11434 (Ollama)**, **8001 (API)**, and **8080 (WebUI)**.
+Setup may report a busy port; bootup refuses to stop an unverified port owner.
+Do not kill an unfamiliar process or open firewall rules to work around this.
+
+From project-root PowerShell, inspect listeners:
+
+```powershell
+Get-NetTCPConnection -State Listen -LocalPort 11434,8001,8080 -ErrorAction SilentlyContinue |
+    Select-Object LocalAddress,LocalPort,OwningProcess
+```
+
+Either stop the conflicting application through its normal controls or choose
+unused ports in `config/bootup.json`. Example alternatives:
+
+| Service | Change this key | Example | Also update |
+| --- | --- | --- | --- |
+| API | `rag_api.port` | `8002` | `rag_api.openai_base_url` to `http://127.0.0.1:8002/v1`, and the saved WebUI connection URL. |
+| WebUI | `open_webui.port` | `8081` | Open `http://127.0.0.1:8081` in your browser; update bookmarks. |
+| Ollama | `ollama.port` | `11435` | Standalone commands need `--ollama-url http://127.0.0.1:11435` or matching `OLLAMA_BASE_URL`. |
+
+The examples are not guaranteed free ports. Check your chosen ports with the
+same command before using them. Keep all hosts on loopback and choose distinct
+ports in the 1–65535 range.
+
+### Existing installation
+
+1. **If changing the API port:** while the old WebUI is still running, add and
+   save the new OpenAI-compatible URL in **Admin Settings → Connections**, using
+   the same API key. Keep the old connection until the new endpoint works.
+   Normal bootup looks up its key by the exact configured URL; changing only
+   the JSON URL can otherwise prevent startup.
+2. Stop the stack **before editing its current ports**. This interrupts chats
+   and other clients of its Ollama instance:
+
+```powershell
+.\.venv\Scripts\python.exe -m services.bootup stop
+```
+
+3. Edit the keys above in `config/bootup.json`, then start with the new settings:
+
+```powershell
+.\.venv\Scripts\python.exe -m services.bootup start
+```
+
+4. Open the new WebUI address, select `GeorgeGPT`, and test a question.
+   Remove an obsolete connection only after the new one works. Reindexing is
+   not required just because a port changed.
+
+For a **first-time installation**, edit ports before setup and use the matching
+WebUI/API URLs when saving the connection. Ollama must already be reachable
+at the configured host/port for the prerequisite check. Managed bootup supplies
+its configured Ollama URL automatically; standalone commands do not read that
+port from bootup JSON.
+
 ## Paths and precedence
 
 - Configured repository and service paths are relative to the **project root**;

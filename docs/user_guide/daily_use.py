@@ -5,6 +5,10 @@ r"""
 
 Run all examples in PowerShell from the GeorgeGPT project root after setup.
 
+**Choose the task you need below.** These are separate procedures, not one
+script to execute from top to bottom. Check that a command succeeds before
+moving to the next command in the same procedure.
+
 ## Start or restart
 
 **Starting performs a restart and interrupts active chats.** Bootup verifies

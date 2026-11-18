@@ -34,10 +34,6 @@ ollama list
 
 Use configured ports if different. Verify `ollama.executable` if setup cannot
 find the executable. Model tags must match `config/models.json` exactly.
-If Ollama is missing, setup offers installation with a **Y/N** prompt.
-Only **Y** downloads and executes the official installation script; **N**
-stops setup. If an installation is found but the configured path is wrong,
-correct `ollama.executable` instead. See [setup](setup.html#if-setup-does-not-detect-ollama).
 Setup downloads missing models; normal bootup does not. Pull the required tag
 or rerun setup after stopping the stack.
 
@@ -58,6 +54,8 @@ For an unrelated application, stop it through its normal controls or choose
 another free **loopback** port. Update the API base URL and WebUI connection
 if changing the API port. Never bypass ownership checks by blindly terminating
 the port owner.
+See [changing the default ports](configuration.html#port-conflicts-and-changing-the-default-ports)
+for the exact JSON keys, example ports, and saved-connection migration order.
 
 ## WebUI cannot connect or GeorgeGPT is missing
 

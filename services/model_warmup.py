@@ -13,6 +13,11 @@ def warm_models(ollama_url: str, models: ModelSettings, timeout: int) -> None:
 
     Loading weights alone does not exercise first-prompt GPU/runtime setup.
     No repository scan, credentials, or user conversation is involved here.
+    `ollama_url` selects the server, `models` supplies exact tags/allocation,
+    and `timeout` bounds each warmup request in seconds. Performs one short
+    tool-free chat and one embedding request, then checks `/api/ps` contains
+    both names. This verifies joint loading, not guaranteed full GPU residency.
+    Invalid responses, request failures, or eviction raise `BootError`.
     """
     base = ollama_url.rstrip("/")
     # Load the larger model first. Ollama can conservatively evict an already

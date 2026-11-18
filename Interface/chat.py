@@ -94,7 +94,13 @@ class ChatError(RuntimeError):
 
 
 def bounded_history(history: list[dict] | None = None) -> list[dict]:
-    """Keep recent text turns only; client system messages gain no authority."""
+    """Return recent allowed text turns within the shared history-character budget.
+
+    Examines at most the last twelve messages, favoring newer turns while
+    retaining chronological order. Client system text becomes explicitly
+    untrusted user context; unsupported roles/nontext content are dropped.
+    Individual text may be truncated. The input list is not modified.
+    """
     result = []
     remaining = MAX_HISTORY_CHARS
     for message in reversed((history or [])[-12:]):
@@ -113,7 +119,13 @@ def bounded_history(history: list[dict] | None = None) -> list[dict]:
 
 
 def prepare_evidence(evidence: list[dict]) -> list[dict]:
-    """Limit documents and serialized context, retaining citation metadata."""
+    """Return up to eight evidence entries bounded by serialized JSON size.
+
+    Preserves bounded IDs and an allowlist of source/location metadata, drops
+    unrelated fields, and truncates passage text as needed. JSON escaping counts
+    against `MAX_CONTEXT_CHARS`, not just raw text length. Produces new mappings
+    without changing retrieved documents or validating their factual accuracy.
+    """
     result = []
     remaining = MAX_CONTEXT_CHARS - 2
     for item in evidence[:8]:
@@ -146,6 +158,14 @@ def prepare_evidence(evidence: list[dict]) -> list[dict]:
 
 
 def build_messages(question: str, evidence: list[dict], history: list[dict] | None = None) -> list[dict]:
+    """Construct the server-controlled prompt plus bounded history and evidence.
+
+    `question` must be nonblank text within `MAX_QUESTION_CHARS`; otherwise
+    raises `ValueError`. Serializes prepared evidence as explicitly untrusted
+    JSON alongside the question. Returns Ollama-style role/content mappings.
+    Does not retrieve documents, call the model, or promote client system text
+    to application-level instructions.
+    """
     if not isinstance(question, str) or not question.strip():
         raise ValueError("question must be nonempty text")
     if len(question) > MAX_QUESTION_CHARS:
@@ -178,7 +198,17 @@ def _content(payload: dict, *, streaming: bool) -> str:
 def generate_answer(messages: list[dict], model: str, ollama_url: str,
                     context_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS,
                     keep_alive_seconds: int = DEFAULT_KEEP_ALIVE_SECONDS) -> str:
-    """Generate text directly from Ollama; upstream details are not exposed."""
+    """Send prepared messages to Ollama and return one bounded text answer.
+
+    `model` and `ollama_url` select the installed chat model/endpoint;
+    context and retention are validated before network work. Requests disable
+    thinking and tools, use a 4096-token generation cap, and enforce connection
+    and read timeouts. Rejects empty, oversized, malformed, or tool-call output.
+
+    Raises `ChatError` for upstream/request/response failures and `ValueError`
+    for invalid allocation settings. Does not retrieve evidence; use
+    `build_messages` or `answer_question` for the surrounding RAG workflow.
+    """
     validate_context_window(context_window_tokens)
     validate_keep_alive(keep_alive_seconds)
     try:
@@ -205,7 +235,14 @@ def generate_answer(messages: list[dict], model: str, ollama_url: str,
 def stream_answer(messages: list[dict], model: str, ollama_url: str,
                   context_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS,
                   keep_alive_seconds: int = DEFAULT_KEEP_ALIVE_SECONDS) -> Iterator[str]:
-    """Yield Ollama NDJSON text chunks; require the terminal done marker."""
+    """Yield text deltas from Ollama's streaming chat endpoint.
+
+    Uses the same model, allocation, and tool/thinking restrictions as
+    `generate_answer`. Parses NDJSON, bounds individual records and cumulative
+    text, and requires a final `done` marker with nonempty total output.
+    `ChatError` can be raised after some text has already been yielded.
+    Closing the generator exits the response context and releases its connection.
+    """
     validate_context_window(context_window_tokens)
     validate_keep_alive(keep_alive_seconds)
     try:
@@ -241,7 +278,17 @@ def stream_answer(messages: list[dict], model: str, ollama_url: str,
 
 def answer_question(question: str, retriever, model: str, ollama_url: str,
                     history: list[dict] | None = None) -> str:
-    """Retrieve once and return a grounded answer without source annotations."""
+    """Validate a question, retrieve evidence once, then generate an answer.
+
+    `retriever` must expose `retrieve(question, history=...)`. Bounds history and
+    evidence before constructing messages; returns plain answer text without
+    programmatically appended source annotations. Retrieval failures propagate,
+    while model failures raise `ChatError`.
+
+    This standalone helper uses `generate_answer` allocation defaults; it does
+    not accept the API's explicit context/retention overrides. No tool execution
+    or model/index installation occurs.
+    """
     # Validate before performing retrieval or network work.
     build_messages(question, [], history)
     history = bounded_history(history)

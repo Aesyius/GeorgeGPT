@@ -11,12 +11,21 @@ DEFAULT_BOOTUP_CONFIG = PROJECT_ROOT / "config" / "bootup.json"
 
 
 def resolve_path(value: str | Path) -> Path:
-    """Expand user/environment variables and resolve relative paths from the cwd."""
+    """Expand user/environment variables and return an absolute normalized path.
+
+    Relative values use the current working directory, not the project root.
+    Resolution does not require the destination to exist and creates nothing.
+    """
     return Path(os.path.expandvars(str(value))).expanduser().resolve()
 
 
 def repository_path_from_config(config: dict, root: Path = PROJECT_ROOT) -> Path:
-    """Resolve bootup's repository setting without depending on service modules."""
+    """Resolve `repository_path` from a supplied bootup mapping.
+
+    Relative configured paths use `root`, unlike explicit CLI paths. Expands
+    environment variables and the user home directory. Missing, empty, or
+    whitespace-padded values raise `ValueError`; existence is checked by callers.
+    """
     value = config.get("repository_path")
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise ValueError("bootup.json repository_path must be nonempty text without surrounding whitespace")
@@ -25,7 +34,13 @@ def repository_path_from_config(config: dict, root: Path = PROJECT_ROOT) -> Path
 
 
 def configured_repository(config: dict | None = None, root: Path = PROJECT_ROOT) -> Path:
-    """Resolve repository defaults, optionally reusing startup's loaded config."""
+    """Choose the repository from an override, supplied mapping, or bootup JSON.
+
+    `RAG_REPOSITORY_PATH` wins first. Otherwise use `config` when supplied, or
+    read the file selected by `RAG_BOOTUP_CONFIG`. Configured relative repository
+    paths use `root`; explicit environment paths use the current directory.
+    Malformed or unreadable configuration raises `ValueError`.
+    """
     if os.getenv("RAG_REPOSITORY_PATH"):
         return resolve_path(os.environ["RAG_REPOSITORY_PATH"])
     if config is not None:

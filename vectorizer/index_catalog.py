@@ -13,7 +13,11 @@ from .vector_store import collection_embedding_model, source_generation, update_
 
 
 def manifest_mapping(metadata: dict, key: str, fallback: str | None = None) -> dict:
-    """Decode a small collection manifest with an actionable schema error."""
+    """Decode a JSON-object metadata entry, optionally using a legacy fallback key.
+
+    Missing keys resolve to an empty mapping. Non-JSON values and non-object
+    JSON raise `ValueError` naming the manifest. Only supplied metadata is read.
+    """
     value = metadata.get(key, metadata.get(fallback, "{}") if fallback else "{}")
     try:
         mapping = json.loads(value)
@@ -25,7 +29,11 @@ def manifest_mapping(metadata: dict, key: str, fallback: str | None = None) -> d
 
 
 def catalog_publication(metadata: dict, sources: dict, versions: dict) -> dict:
-    """Merge repository snapshots without changing another model's data manifest."""
+    """Return merged catalog source/version JSON and its generation fingerprint.
+
+    Combines `sources` and `versions` with existing catalog or legacy manifests.
+    Does not write metadata or alter another model's collection snapshot.
+    """
     all_sources = manifest_mapping(metadata, "catalog_sources", "index_sources")
     all_sources.update(sources)
     all_versions = manifest_mapping(metadata, "catalog_versions", "source_versions")
@@ -38,11 +46,22 @@ def catalog_publication(metadata: dict, sources: dict, versions: dict) -> dict:
 
 
 def snapshot_generation(metadata: dict, *, is_base: bool) -> str | None:
+    """Read the legacy/base or managed snapshot generation from metadata.
+
+    Base collections use `index_generation`; managed model indexes use
+    `source_generation`. Returns `None` when no generation has been published.
+    """
     return metadata.get("index_generation" if is_base else "source_generation")
 
 
 def select_index_collection(db_path: str | Path, base_collection: str, embedding_model: str) -> str:
-    """Choose an existing registered index, or isolate a different model safely."""
+    """Choose a collection name for indexing without creating that collection.
+
+    Prefers a registered model index, otherwise reuses a matching/empty base.
+    If the base belongs to a different model, returns a deterministic isolated
+    name. Opens persistent Chroma to inspect bounded ownership/catalog metadata;
+    callers must build and register the chosen index separately.
+    """
     with closing(chromadb.PersistentClient(path=str(resolve_path(db_path)))) as client:
         try:
             base = client.get_collection(name=base_collection)
@@ -58,7 +77,12 @@ def select_index_collection(db_path: str | Path, base_collection: str, embedding
 
 
 def register_collection(client, base_collection: str, collection_name: str, embedding_model: str) -> None:
-    """Publish completion using an already-open client (including during startup)."""
+    """Publish a completed index's model mapping and catalog generation.
+
+    Uses an already-open Chroma client. Returns without publishing if the target
+    lacks readiness or a source manifest; otherwise updates base catalog metadata
+    and the target's source generation. Does not embed, audit, or copy vectors.
+    """
     collection = client.get_collection(name=collection_name)
     metadata = collection.metadata or {}
     sources = manifest_mapping(metadata, "index_sources")
@@ -82,13 +106,23 @@ def register_collection(client, base_collection: str, collection_name: str, embe
 
 def register_index(db_path: str | Path, base_collection: str, collection_name: str,
                    embedding_model: str) -> None:
-    """Publish a completed CLI index in the catalog consulted by API startup."""
+    """Open the persistent client and delegate catalog publication to `register_collection`.
+
+    The target collection must already exist; no embedding or index build occurs.
+    """
     with closing(chromadb.PersistentClient(path=str(resolve_path(db_path)))) as client:
         register_collection(client, base_collection, collection_name, embedding_model)
 
 
 def matching_index(db_path: str | Path, base_collection: str, embedding_model: str) -> str:
-    """Resolve a prepared index for read-only commands without scanning chunks."""
+    """Resolve a model's catalog mapping and reject known stale/incompatible state.
+
+    Returns the actual collection name. Reads collection-level metadata only.
+    Missing collections propagate storage errors; known model mismatch,
+    incomplete readiness, or catalog-generation mismatch raises `ValueError`.
+    Legacy collections without full manifests retain compatibility behavior.
+    Does not create a prepared index or repair mismatches.
+    """
     with closing(chromadb.PersistentClient(path=str(resolve_path(db_path)))) as client:
         base = client.get_collection(name=base_collection)
         base_metadata = base.metadata or {}

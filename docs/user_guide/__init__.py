@@ -1,10 +1,20 @@
 r"""
 # GeorgeGPT: start here
 
+**GitHub repository:** [Aesyius/GeorgeGPT](https://github.com/Aesyius/GeorgeGPT)
+
 GeorgeGPT answers questions about an indexed repository's code and documentation.
 It runs locally on Windows with Ollama, Chroma, SQLite keyword search, and Open
 WebUI. Indexing makes files searchable; it does **not** train the chat model.
 GeorgeGPT cannot execute commands, modify files, or access infrastructure.
+
+## Repository maintainer
+
+**Cpl Jack Gan**
+
+- **Unit:** CFNOC, B SQN CPT 4
+- **Contact:** Reachable on Teams
+- **Email:** [jack.gan@forces.gc.ca](mailto:jack.gan@forces.gc.ca)
 
 ## First time?
 
@@ -12,12 +22,26 @@ Read **[First-time setup](user_guide/setup.html)** from top to bottom.
 It covers prerequisites, `setup.ps1`, the WebUI connection, and your first question.
 You do not need to understand the Python API to use the application.
 
+### Follow this path
+
+1. [Set up GeorgeGPT](user_guide/setup.html): follow the seven installation
+   steps and confirm that your first question works.
+2. [Learn daily operation](user_guide/daily_use.html): start, stop, and refresh
+   the index after source changes.
+3. [Look up flags when needed](user_guide/cli.html): reference individual
+   commands without repeating the installer.
+
+> **Reading these docs:** start with the guide, not the Python API pages.
+> Follow numbered setup steps in order. Later reference pages describe separate
+> tasks; you do not need to run every command shown.
+
 ## What do you want to do?
 
 | Task | Guide |
 | --- | --- |
 | Install and connect the application | [First-time setup](user_guide/setup.html) |
 | Start, restart, stop, or update the index | [Daily use and bootup](user_guide/daily_use.html) |
+| Understand the models, 12 GB VRAM target, and software components | [Technology stack](user_guide/tech_stack.html) |
 | Look up a command or any supported flag | [Complete CLI reference](user_guide/cli.html) |
 | Change models, ports, paths, or environment overrides | [Configuration](user_guide/configuration.html) |
 | Resolve a failed setup or startup | [Troubleshooting](user_guide/troubleshooting.html) |

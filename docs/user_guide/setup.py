@@ -1,220 +1,231 @@
 r"""
 # First-time setup
 
-[Home](../user_guide.html) · [Daily use](daily_use.html) · [CLI flags](cli.html)
+Follow these steps in order. You will install GeorgeGPT, connect its chat
+interface, and ask your first question.
 
-## 1. Install prerequisites
+> **Estimated installation time: approximately 30 minutes**, depending on
+> your internet speed, hardware, and the size of the repository being indexed.
+> Large model downloads or repositories may take longer.
 
-Use Windows 10/11 (64-bit), PowerShell 5.1 or newer, and:
+**You need:** Windows 10/11 (64-bit), PowerShell 5.1 or newer, internet for the
+initial downloads, and a local repository to search.
 
-- **64-bit Python 3.12**, including the **py launcher**.
-- **Ollama**, installed and running locally.
-- Internet access and enough disk space for two Python environments, model
-  weights, and your index. First indexing can take substantially longer than
-  subsequent starts.
+**Path examples:** `C:\Projects\GeorgeGPT` is the application folder.
+`C:\Repos\MyProject` is the repository you want to ask questions about.
+Replace both with your real paths and quote paths containing spaces.
 
-Check from PowerShell:
+## Step 1 — Install the prerequisites
+
+1. Install **64-bit Python 3.12**, including the **py launcher**.
+2. Open PowerShell and check your Python installation:
 
 ```powershell
 py -3.12 --version
-ollama --version
 ```
 
-If a command is missing, install the prerequisite and reopen PowerShell.
-Start the Ollama application before running setup.
+**Before continuing:** the command should report Python 3.12. If it is missing,
+finish installing Python and reopen PowerShell.
 
-### If setup does not detect Ollama
+**Disk space:** budget approximately **15–20 GB for the completed installation**
+with the default `qwen3.5:9b` chat model, `qwen3-embedding:4B` embedding model,
+and both Python environments. This is a planning estimate, not a fixed size.
+Your source repository, its generated index, download caches, and additional
+models require extra space. Aim for **at least 25–30 GB free before setup**
+to leave room for downloads and temporary installation files; large repositories
+or different model choices may need more.
 
-If `setup.ps1` cannot find Ollama, it asks **Install Ollama now? Press Y/N**.
-Press **Y** to download and run the installer below, or **N** to stop setup
-without installing. Invalid answers prompt again. `-WhatIf` never prompts
-for installation or downloads anything.
+## Step 2 — Download GeorgeGPT and open its folder
 
-```powershell
-irm https://ollama.com/install.ps1 | iex
-```
-
-You can also run this command manually in PowerShell.
-It downloads and immediately executes Ollama's installation script from
-the internet. Only run it if you trust the source; review the script first
-if required by your security policy.
-
-Setup rechecks the configured executable after installation, then checks the
-local Ollama endpoint. If Ollama is not running yet, start the application
-and rerun `setup.ps1`; reopen PowerShell if needed.
-If Ollama is found on PATH or in its default installation directory but the
-configured path is wrong, setup asks you to correct `ollama.executable` in
-`config/bootup.json` instead of reinstalling.
-
-### Download GeorgeGPT
-
-Download/extract the project, or clone it if Git is installed:
+Download and extract the repository, or clone it if Git is installed:
 
 ```powershell
 git clone https://github.com/Aesyius/GeorgeGPT.git C:\Projects\GeorgeGPT
+```
+
+Open the application folder in PowerShell:
+
+```powershell
 Set-Location "C:\Projects\GeorgeGPT"
 ```
 
-Do not copy another computer's `.venv` or `.venv-webui`. Setup creates them
-for this machine. Choose a short, writable project path.
+**Before continuing:** confirm this folder contains `setup.ps1`.
+Run every remaining command from this folder.
+Do not copy another computer's `.venv` or `.venv-webui`; setup creates them
+for this machine.
 
-## 2. Review configuration and your source repository
+## Step 3 — Choose the repository and review configuration
 
-The repository to search is **not necessarily GeorgeGPT itself**.
-Choose an existing local directory, such as `C:\Repos\MyProject`.
-Do not use the example path literally unless it exists.
+Choose an existing repository directory, such as `C:\Repos\MyProject`.
+It does not have to be the GeorgeGPT repository.
 
-- `config/models.json`: chat model, embedding model, context, and retention.
-  The shipped selections are `qwen3.5:9b`, `qwen3-embedding:4B`, a 16384-token
-  context, and 1800 seconds retention. This targets a 12 GB VRAM GPU; full GPU
-  residency depends on available memory, quantization, and Ollama.
-- `config/bootup.json`: service executables, ports, logs, model-config path,
-  and repository. Setup saves your selected repository here.
-- If Ollama is installed outside `%LOCALAPPDATA%\Programs\Ollama`, update
-  `ollama.executable` before continuing.
+| Review | What to check |
+| --- | --- |
+| `config/models.json` | Chat model, embedding model, context window, and retention. |
+| `config/bootup.json` | Ollama executable path, local ports, logs, and model-config path. Setup saves your chosen repository here. |
+| `vectorizer/source_files.py` | Source filters, especially before indexing sensitive repositories. |
 
-Keep hosts on `127.0.0.1` or `localhost`. Ports must be distinct and available.
-If changing the API port, also change `rag_api.openai_base_url` to the matching
-URL ending in `/v1`.
+The shipped model settings are `qwen3.5:9b`, `qwen3-embedding:4B`, a
+16384-token context, and 1800 seconds retention. This targets a 12 GB VRAM
+GPU; full GPU residency depends on available memory, quantization, and Ollama.
 
-Review `vectorizer/source_files.py` before indexing sensitive content.
-Actual `.env` files, common credentials, binaries, large files, caches,
-environments, and generated directories are filtered, but filtering is not
-a guarantee that every secret is excluded.
+Keep all hosts on `127.0.0.1` or `localhost`. Ports must be distinct and free.
+If you change the API port, update `rag_api.openai_base_url` to the matching
+URL ending in `/v1`. See [configuration](configuration.html) for every setting.
+If a default port is busy, follow
+[port conflicts and changing ports](configuration.html#port-conflicts-and-changing-the-default-ports)
+before running setup.
 
-## 3. Preview, then run setup
+**Before continuing:** verify the source directory exists and your model
+choices fit the machine. Filtering excludes common secrets, binaries, large
+files, caches, environments, and generated directories, but cannot guarantee
+every secret is excluded.
 
-**If this stack is already running**, stop it first (this interrupts chats):
+## Step 4 — Preview the installation
+
+On a fresh checkout, proceed directly to the preview command below.
+If this stack is already running, stop it first. **Stopping interrupts chats:**
 
 ```powershell
-.\.venv\Scripts\python.exe -m services.bootup kill
+.\.venv\Scripts\python.exe -m services.bootup stop
 ```
 
-Skip that command on a fresh checkout with no `.venv`.
-Preview setup without installing, downloading, indexing, starting services,
-or changing configuration:
+Skip that stop command if no environment has been created yet.
+Then preview setup using your actual repository path:
 
 ```powershell
 .\setup.ps1 -RepositoryPath "C:\Repos\MyProject" -WhatIf
 ```
 
-Preview still reads the repository and JSON configuration. It deliberately
-does not check Python/Ollama availability or service ports.
+**Expected result:** the terminal shows the chosen repository, model names,
+and six planned stages. It does not install, download, index, change
+configuration, launch services, create logs, or ask for installation consent.
+Preview reads configuration but does not probe Python, Ollama, or service ports.
 
-Run the actual setup:
+## Step 5 — Run setup and confirm
+
+Remove `-WhatIf` to begin:
 
 ```powershell
 .\setup.ps1 -RepositoryPath "C:\Repos\MyProject"
 ```
 
-Setup:
+After the opening banner, answer **Continue with installation? Press Y/N**:
 
-1. Checks Python 3.12, Ollama availability, local configuration, and free
-   API/WebUI ports before installation.
-2. Saves the repository path in the selected bootup JSON.
-3. Creates or reuses `.venv` and `.venv-webui`, upgrades their pip, and installs
-   the pinned runtime and WebUI dependencies.
-4. Downloads missing configured models; already installed models are reused.
-5. Indexes eligible text and verifies vector/metadata/keyword consistency.
-6. Warms models and launches the API and WebUI.
-7. Waits for you to save and verify the WebUI connection.
+- **Y:** continue to the prerequisite checks and installation.
+- **N:** exit without installation or configuration changes.
+- Other answers repeat the prompt.
 
-Wait for progress to finish; do not treat a long embedding stage as a failure
-without checking its output. Setup is not transactional: if interrupted,
-environments, downloaded models, saved configuration, and launched services
-can remain.
+Once checks pass, setup saves the repository path and performs these stages:
 
-### Progress, timestamps, and quiet output
+| Stage | What happens |
+| --- | --- |
+| 1. Python environments | Creates or reuses `.venv` and `.venv-webui`. |
+| 2. Dependencies | Upgrades pip and installs the pinned project and WebUI dependencies. |
+| 3. Ollama models | Reuses installed models and downloads missing configured model weights. |
+| 4. Repository index | Chunks eligible files and creates or updates vectors and keyword rows. |
+| 5. Integrity audit | Verifies chunk, metadata, vector, and keyword-index consistency. |
+| 6. Services and connection | Warms models, launches the API and WebUI, and waits for you to save the connection. |
 
-Setup displays six numbered stages with timestamps, elapsed time per stage,
-and a final timing summary. The overall PowerShell loading bar shows **steps
-completed**, not an estimate of time remaining. Timings include time spent
-waiting for your input, such as saving the WebUI connection.
+**While you wait:** numbered stages and timestamped messages show progress.
+The loading bar measures steps completed, not time remaining.
+First-time indexing and large model downloads can take a while.
 
-Dependency installation and Ollama pulls are **quiet by default**. You still
-see which model is downloading or being reused, and a timestamped completion
-message. Detailed pip/Ollama stdout and stderr are saved to a unique
-`setup-YYYYMMDD-HHMMSS-PID.log` in the configured `logs_directory` (normally
-`%LOCALAPPDATA%\Vectorizer\logs`). The terminal prints the exact log location.
+**Next action:** when WebUI opens or setup asks you to save the connection,
+continue to Step 6. Keep the setup terminal open.
 
-To also show detailed dependency and model output in the terminal:
+If interrupted, setup does not roll back completed work. Environments,
+downloads, configuration, and launched services may remain.
 
-```powershell
-.\setup.ps1 -RepositoryPath "C:\Repos\MyProject" -Verbose
-```
+## Step 6 — Connect Open WebUI
 
-Quiet mode does not invent a download percentage. Use `-Verbose` to see native
-download output. Indexing progress, verification output, and interactive WebUI
-connection prompts remain visible in both modes. The setup log is not a full
-terminal transcript: it captures status/timing messages and dependency/model
-command output, not interactive credentials.
+Use the default URLs below unless you changed the configured ports.
 
-On a dependency/model command failure, setup shows the exit code, recent output,
-the log location, and the failed stage's elapsed time. Progress is cleared on
-exit. `-WhatIf` does not start timers/progress bars or create setup logs.
-
-If a trusted checkout is blocked by execution policy, use a process-only
-bypass, not a machine-wide policy change:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -RepositoryPath "C:\Repos\MyProject"
-```
-
-## 4. Finish the Open WebUI connection
-
-1. Open **http://127.0.0.1:8080** if the browser did not open.
+1. Open [Open WebUI](http://127.0.0.1:8080) if the browser did not open.
 2. Create your administrator account.
-3. Open **Admin Settings → Connections** and save an OpenAI-compatible
-   connection to **http://127.0.0.1:8001/v1**.
-4. Use the setup API key. At the terminal prompt, type **C** to copy it if
-   necessary, paste it into the connection, save, and clear your clipboard.
-   Clipboard contents may be shared by your operating system.
-5. Press **Enter** in the setup terminal to check the saved connection.
-6. Select **GeorgeGPT** in WebUI. Leave WebUI Knowledge/RAG disabled.
+3. Open **Admin Settings → Connections**.
+4. Save an OpenAI-compatible connection with the URL
+   **`http://127.0.0.1:8001/v1`** and the setup API key.
+5. If you need the key, type **C** at the setup terminal prompt, paste the
+   copied key into WebUI, and save the connection.
+6. Clear your clipboard, return to the terminal, and press **Enter** to
+   verify the saved connection.
+7. Select **GeorgeGPT** in WebUI. Keep WebUI Knowledge/RAG disabled.
 
-Use configured ports instead if you changed them. Setup supplies the key to
-WebUI at launch and reuses an existing matching saved key; it does not reset
-your account or database.
+**Expected result:** the terminal reports setup completed successfully and
+the WebUI model list includes `GeorgeGPT`.
 
-Typing **Q** leaves connection setup incomplete; services already launched
-remain running. Use the stop command above if you want them shut down.
-Never paste your API key into chat, documentation, screenshots, or bug reports.
+Setup supplies the key to WebUI at launch and reuses an existing matching
+saved key. It does not reset your account or database. Clipboard contents
+may be shared by the operating system; never include keys in screenshots,
+chat, documentation, or reports.
 
-## 5. Ask your first question
+Typing **Q** leaves connection setup incomplete. Services already launched
+remain running; use the stop command in Step 4 to shut them down.
 
-Ask about something you know exists in the indexed repository, for example:
-“What does the main entry point do?” Include a real filename or symbol for a
-more focused answer. An answer is not proof of current running-system state.
+## Step 7 — Ask your first question
 
-You can also use the terminal while Ollama is running:
+Ask about a real file, symbol, or feature in the indexed repository.
+For example: “What does the main entry point do?”
+
+You can also ask from the same project-root PowerShell window while Ollama
+is running:
 
 ```powershell
 .\.venv\Scripts\python.exe -m Interface.ask "What does the main entry point do?"
 ```
 
-Success means setup reports completion, WebUI offers `GeorgeGPT`, and a question
-returns an answer grounded in your repository. Integrity verification checks
-index consistency, not answer correctness.
+**Expected result:** an answer grounded in the indexed repository.
+An integrity PASS is not proof of answer accuracy, and source code does not
+prove a running system's current state.
 
-Next time, use [bootup](daily_use.html), not the full installer.
-See [troubleshooting](troubleshooting.html) if setup stops.
+**You are ready for normal use.** Follow [Daily use and bootup](daily_use.html)
+for subsequent starts, stops, and index updates. Do not repeat the full
+installer for an ordinary launch.
+
+## Optional — Detailed output and logs
+
+Dependency installation and model pulls are quiet by default. To show their
+detailed output in the terminal too, use:
+
+```powershell
+.\setup.ps1 -RepositoryPath "C:\Repos\MyProject" -Verbose
+```
+
+In both modes, detailed pip/Ollama stdout and stderr are saved to a unique
+`setup-YYYYMMDD-HHMMSS-PID.log` in `logs_directory`, normally
+`%LOCALAPPDATA%\Vectorizer\logs`. The terminal prints the exact location.
+Indexing progress, verification output, and connection prompts remain visible.
+
+On a dependency/model command failure, setup shows its exit code, recent
+output, and log location. The final summary includes each stage's elapsed time,
+including time spent waiting for your input. Progress indicators clear on exit.
+The setup log is not a complete terminal transcript and does not record
+interactive credentials.
+
+## If PowerShell blocks the script
+
+Only for a trusted checkout, use this process-only policy bypass:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -RepositoryPath "C:\Repos\MyProject"
+```
+
+Do not change machine-wide execution policy just to run setup.
+For other failures, use [Troubleshooting](troubleshooting.html).
 
 ## Setup flags
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `-RepositoryPath PATH` | Required | Existing directory to index; saved in the selected bootup JSON. Relative paths resolve from the shell's current directory. |
-| `-ConfigPath PATH` | Project `config/bootup.json` | Existing bootup JSON. A supplied relative path resolves from the current directory. |
-| `-NoBrowser` | Off | Do not automatically open WebUI; services and connection prompt still run. |
-| `-WhatIf` | Off | Offline preview; no installation or persistent changes. |
-| `-Confirm` | Off by default | Ask before the setup action through PowerShell ShouldProcess. |
-| `-Verbose` | Off | Show pip/Ollama output in the terminal as well as saving it to the setup log. |
+| `-RepositoryPath PATH` | Required | Existing source directory; saved in the selected bootup JSON. Relative paths resolve from the current directory. |
+| `-ConfigPath PATH` | Project `config/bootup.json` | Existing bootup JSON; supplied relative paths resolve from the current directory. |
+| `-NoBrowser` | Off | Do not open the browser automatically. Services and connection prompts still run. |
+| `-WhatIf` | Off | Offline preview; no installation, consent prompts, or persistent changes. |
+| `-Confirm` | PowerShell default | Additional ShouldProcess confirmation before the setup action. |
+| `-Verbose` | Off | Also show detailed pip/Ollama output in the terminal. |
 
-Standard PowerShell common parameters are also accepted; they do not replace
-the setup-specific checks. List PowerShell syntax with
-`Get-Help .\setup.ps1 -Full`.
-
-```powershell
-.\setup.ps1 -RepositoryPath "C:\Repos\MyProject" -ConfigPath ".\config\bootup.json" -NoBrowser
-```
+Standard PowerShell common parameters are also accepted.
+Use `Get-Help .\setup.ps1 -Full` for the syntax supported by your shell.
+See the [complete CLI reference](cli.html) for the rest of the commands.
 """

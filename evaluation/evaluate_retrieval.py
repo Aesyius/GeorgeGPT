@@ -12,7 +12,16 @@ from vectorizer.retrieval import Retriever
 
 
 def evaluate(questions: list[dict], retriever) -> dict:
-    """Score path-level relevance proxies; retain passages for completeness review."""
+    """Retrieve each question and compute expected-path relevance proxies.
+
+    `questions` contains string `id`/`question` and optional `expected_paths`.
+    `retriever` supplies `retrieve(question)`. Returns per-question evidence,
+    path recall, first relevant rank, reciprocal rank, and aggregate means
+    over questions with expected paths. Path separators are normalized.
+
+    Does not generate answers, save files, or modify the corpus. Matching a path
+    is not proof that a passage supports the answer. Retriever failures propagate.
+    """
     results = []
     scored = []
     for question in questions:
@@ -38,6 +47,14 @@ def evaluate(questions: list[dict], retriever) -> dict:
 
 
 def main() -> None:
+    """Run retrieval-only evaluation and save a new JSON report.
+
+    Requires a fresh `--output` path, a matching prepared index, and an available
+    embedding model. Reads JSONL questions, calls `evaluate`, closes the index
+    client, writes report metadata/results atomically, and prints aggregate
+    path metrics. Refuses existing output; does not call the chat model.
+    Use `--help` for supported index/question/retrieval flags.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--questions", type=resolve_path, default=PROJECT_ROOT / "sample_questions/fak_questions.jsonl")
     parser.add_argument("--output", type=resolve_path, required=True, help="new JSON output file; never reuses old results")

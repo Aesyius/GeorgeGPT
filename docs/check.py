@@ -1,4 +1,4 @@
-"""Check static HTML links and project CLI flag coverage without running services."""
+"""Check HTML navigation, public API docstrings, and CLI flags without running services."""
 
 import ast
 from html.parser import HTMLParser
@@ -7,7 +7,10 @@ from urllib.parse import unquote, urlsplit
 
 
 class Page(HTMLParser):
+    """Collect local navigation links and anchor IDs from one generated HTML page."""
+
     def __init__(self, text: str):
+        """Parse a page immediately, retaining links, IDs, and navigation presence."""
         super().__init__(convert_charrefs=True)
         self.ids: set[str] = set()
         self.links: list[str] = []
@@ -15,6 +18,7 @@ class Page(HTMLParser):
         self.feed(text)
 
     def handle_starttag(self, tag, attrs):
+        """Record link destinations, named IDs, and the shared navigation marker."""
         values = dict(attrs)
         if values.get("aria-label") == "Documentation":
             self.navigation = True
@@ -25,6 +29,12 @@ class Page(HTMLParser):
 
 
 def main() -> None:
+    """Validate the built site and source documentation, exiting nonzero on gaps.
+
+    Checks links/anchors, portable paths, shared navigation, public Python API
+    docstrings, and per-command flag coverage. Uses AST inspection rather than
+    importing services or executing CLI entry points.
+    """
     root = Path(__file__).resolve().parents[1]
     output = root / "docs" / "html"
     pages = {
@@ -55,9 +65,26 @@ def main() -> None:
     # Inspect parser declarations as data; never invoke startup/indexing.
     reference = (root / "docs" / "user_guide" / "cli.py").read_text(encoding="utf-8")
     count = 0
-    for package in ("Interface", "vectorizer", "services", "evaluation"):
+    documented = 0
+    for package in ("common", "Interface", "vectorizer", "services", "evaluation"):
         for path in (root / package).glob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+            module = f"{package}.{path.stem}"
+            for node in tree.body:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) or node.name.startswith("_"):
+                    continue
+                definitions = [(node.name, node)]
+                if isinstance(node, ast.ClassDef):
+                    definitions.extend(
+                        (f"{node.name}.{member.name}", member)
+                        for member in node.body
+                        if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and (not member.name.startswith("_") or member.name == "__init__")
+                    )
+                for name, definition in definitions:
+                    documented += 1
+                    if not ast.get_docstring(definition):
+                        errors.append(f"{module}.{name}: missing public API docstring")
             arguments = [
                 node for node in ast.walk(tree)
                 if isinstance(node, ast.Call)
@@ -66,7 +93,6 @@ def main() -> None:
             ]
             if not arguments:
                 continue
-            module = f"{package}.{path.stem}"
             if module not in reference:
                 errors.append(f"Undocumented CLI module: {module}")
             # Scope flags to the module section so another CLI cannot mask a gap.
@@ -86,7 +112,10 @@ def main() -> None:
                             errors.append(f"{module}: missing flag {arg.value}")
     if errors:
         raise SystemExit("\n".join(errors))
-    print(f"PASS: {len(pages)} HTML pages, local links/anchors, {count} CLI flag declarations.")
+    print(
+        f"PASS: {len(pages)} HTML pages, local links/anchors, "
+        f"{count} CLI flag declarations, {documented} documented public definitions."
+    )
 
 
 if __name__ == "__main__":

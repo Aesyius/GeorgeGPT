@@ -117,6 +117,14 @@ def verified_ollama_roots(config: dict, root: Path, processes: list[dict]) -> li
 
 
 def verified_webui_roots(config: dict, root: Path, processes: list[dict]) -> list[int]:
+    """Return verified top-level WebUI process-tree roots without stopping them.
+
+    Matches the configured Python executable and WebUI launch marker, includes
+    descendants, and checks every configured-port listener belongs to those
+    trees. Missing Python or an unverified listener raises `BootError`.
+    `processes` is a caller-supplied Windows snapshot; ownership is rechecked
+    later before termination.
+    """
     python = expand_path(config["open_webui"]["python"], root)
     if not python.is_file():
         raise BootError(f"Open WebUI Python executable not found: {python}")
@@ -160,6 +168,12 @@ def verified_api_roots(config: dict, root: Path, processes: list[dict]) -> list[
 
 
 def stop_service_roots(pids: list[int], description: str, port: int) -> None:
+    """Stop preverified process trees, then wait for their listener port to clear.
+
+    Calls the forceful tree-termination helper for each PID and polls up to
+    30 seconds when targets exist. `pids` must already pass ownership and
+    protection checks. Does not restart the service or remove persisted data.
+    """
     for pid in pids:
         stop_verified_process_tree(pid, description)
     if pids:
@@ -167,15 +181,30 @@ def stop_service_roots(pids: list[int], description: str, port: int) -> None:
 
 
 def force_restart_ollama(config: dict, root: Path, processes: list[dict]) -> None:
+    """Verify and stop existing Ollama trees as the shutdown half of a restart.
+
+    Despite the compatibility name, this function does not launch a replacement;
+    the caller must invoke `start_ollama` separately. Interrupts Ollama clients.
+    """
     stop_service_roots(verified_ollama_roots(config, root, processes), "Ollama", config["ollama"]["port"])
 
 
 def force_restart_webui(config: dict, root: Path, processes: list[dict]) -> None:
+    """Verify and stop existing WebUI trees before a separately managed relaunch.
+
+    Does not launch WebUI itself or reset its database; active chats can be
+    interrupted. Ownership failures abort without killing unverified listeners.
+    """
     stop_service_roots(verified_webui_roots(config, root, processes), "Open WebUI", config["open_webui"]["port"])
 
 
 @dataclass(frozen=True)
 class StopPlan:
+    """Immutable description of verified shutdown targets for one service.
+
+    Stores the port, initially selected root PIDs, and selector used to recheck
+    ownership against a fresh snapshot before any destructive action.
+    """
     description: str
     port: int
     pids: list[int]
@@ -183,13 +212,32 @@ class StopPlan:
 
 
 def ensure_unprotected(tree: ProcessTree, pids: list[int], protected: set[int], description: str) -> None:
+    """Refuse termination when a target tree intersects protected process IDs.
+
+    Evaluates the supplied snapshot only. Raises `BootError` if any root or
+    descendant would include the current CLI or a service excluded from shutdown.
+    Performs no OS termination or fresh process inspection.
+    """
     for pid in pids:
         if ({pid} | tree.descendants(pid)) & protected:
             raise BootError(f"Refusing to stop {description}: its process tree includes the CLI or a service not selected for shutdown.")
 
 
 def kill_current_processes(config: dict, root: Path, service: str = "all", *, dry_run: bool = False) -> None:
-    """Preflight all services, then stop WebUI/API/Ollama in dependency order."""
+    """Verify selected services, then stop WebUI/API/Ollama in dependency order.
+
+    Args:
+        config: Bootup mapping with executable paths, ports, and service identities.
+        root: Project root for relative configured paths.
+        service: `all`, `ollama`, `webui`, or `api`.
+        dry_run: Print verified targets without terminating anything.
+
+    Protects the CLI and unselected listeners, checks fresh process identity
+    before termination, and aborts on PID reuse/ownership changes. Real shutdown
+    force-stops process trees and interrupts active clients; databases, indexes,
+    environments, and logs are preserved. `BootError` reports unsafe ownership
+    or failed shutdown; invalid selectors raise `ValueError`.
+    """
     if service not in {"all", "ollama", "webui", "api"}:
         raise ValueError(f"unsupported service: {service}")
     processes = process_snapshot()
@@ -237,6 +285,12 @@ def kill_current_processes(config: dict, root: Path, service: str = "all", *, dr
 
 
 def verify_api_configuration(api_url: str, headers: dict, models: ModelSettings, ollama_url: str) -> None:
+    """Compare the new API's authenticated runtime settings with expected startup values.
+
+    Requests `/v1/config` using caller-supplied authorization headers and checks
+    model names, allocation, retention, and Ollama URL. Raises `BootError` if the
+    request fails or fields differ. Never logs the supplied API key.
+    """
     try:
         _, actual = request_json(f"{api_url}/v1/config", headers=headers)
     except Exception as error:
@@ -248,6 +302,14 @@ def verify_api_configuration(api_url: str, headers: dict, models: ModelSettings,
 
 
 def start_ollama(config: dict, settings: StartupSettings) -> None:
+    """Launch configured local Ollama, verify installed models, and warm inference.
+
+    Applies context/retention and two-model residency settings to the child,
+    appends output to `ollama.log`, and polls readiness. Missing required model
+    tags raise `BootError`; nothing is downloaded. `warm_models` exercises both
+    models and checks joint residency before startup can continue.
+    Assumes preflight has dealt with existing processes/port ownership.
+    """
     ollama = config["ollama"]
     url = service_url(ollama)
     env = os.environ.copy()
@@ -274,6 +336,16 @@ def start_ollama(config: dict, settings: StartupSettings) -> None:
 
 
 def start_rag_api(config: dict, settings: StartupSettings, api_key: str) -> None:
+    """Prepare the selected embedding index, launch Uvicorn, and verify API readiness.
+
+    Passes authoritative model/source settings and the secret through a child
+    environment, not argv. Index preparation runs before the HTTP readiness
+    timeout and can build/write vectors and BM25. Preparation errors prevent
+    API launch. Then starts `Interface.server:app` on the configured loopback
+    endpoint, logs to `rag-api.log`, and verifies model/runtime configuration
+    with bearer-authenticated requests. Already launched services are not rolled
+    back on a later failure.
+    """
     api = config["rag_api"]
     python = expand_path(api["python"], settings.root)
     if not python.is_file():
@@ -317,6 +389,15 @@ def start_rag_api(config: dict, settings: StartupSettings, api_key: str) -> None
 
 
 def start_webui(config: dict, settings: StartupSettings, api_key: str) -> None:
+    """Launch WebUI in its separate environment and wait for its local HTTP page.
+
+    Supplies the GeorgeGPT OpenAI connection and key through the child
+    environment, retains WebUI's persistent signing-key behavior, and disables
+    client-side execution integrations. Creates the runtime working directory
+    and appends diagnostics to `open-webui.log`. Does not create an account,
+    reset storage, save a connection directly, or open the browser.
+    Missing interpreter or readiness failures abort startup.
+    """
     webui = config["open_webui"]
     python = expand_path(webui["python"], settings.root)
     if not python.is_file():
@@ -341,7 +422,14 @@ def start_webui(config: dict, settings: StartupSettings, api_key: str) -> None:
 
 
 def start_services(config: dict, root: Path) -> None:
-    """Resolve, preflight, restart dependencies, then launch in dependency order."""
+    """Restart the complete local stack using validated settings and its saved key.
+
+    Resolves configuration, reads WebUI's saved connection secret, verifies/stops
+    existing trees, then starts Ollama, API, and WebUI in dependency order.
+    **Interrupts active chats and other clients of this Ollama instance.**
+    Returns only after readiness checks succeed. Does not pull missing models;
+    partial startup is not rolled back if a subsequent stage fails.
+    """
     settings = StartupSettings.from_config(config, root)
     api_key = read_api_key(config, root)
     kill_current_processes(config, root)
@@ -352,6 +440,11 @@ def start_services(config: dict, root: Path) -> None:
 
 
 def argument_parser() -> argparse.ArgumentParser:
+    """Return the start/stop CLI parser without reading configuration or running services.
+
+    Defines command aliases, custom config, selective stop, and stop dry-run
+    flags. Cross-option validation is performed by `main` after parsing.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", nargs="?", default="start", choices=("start", "bootup", "kill", "stop"),
                         help="start/bootup: launch the stack (default); kill/stop: terminate verified services without restarting")
@@ -364,6 +457,13 @@ def argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    """Run managed start/restart or verified shutdown from command-line arguments.
+
+    Loads the selected bootup JSON, rejects stop-only options on start, and
+    dispatches `start_services` or `kill_current_processes`. Returns 0 on success,
+    1 for handled operational failures; argparse reports invalid input separately.
+    Windowless launches route status/errors to logs. No automatic rollback occurs.
+    """
     parser = argument_parser()
     args = parser.parse_args()
     stopping = args.command in {"kill", "stop"}

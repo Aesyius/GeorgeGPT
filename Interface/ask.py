@@ -14,6 +14,14 @@ from vectorizer.retrieval import Retriever
 
 
 def main() -> None:
+    """Answer one CLI question using the existing hybrid index and Ollama.
+
+    Parses index/model/endpoint overrides, retrieves evidence, and prints the
+    generated answer. Requires a matching index and running chat/embedding
+    models; does not start services or require WebUI/API credentials.
+    Invalid `top_k` is an argparse error; handled retrieval/generation failures
+    print to stderr and exit with status 1. Use `--help` for supported flags.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("question", help="question to answer from the indexed repository")
     parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))))

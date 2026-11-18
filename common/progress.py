@@ -7,7 +7,18 @@ from typing import TextIO
 
 
 class ProgressBar:
+    """Report bounded-work progress without terminal or third-party dependencies.
+
+    Interactive streams redraw one line; redirected streams emit periodic text
+    updates suitable for logs. Counts measure completed work, not remaining time.
+    """
+
     def __init__(self, stream: TextIO | None = None, width: int = 28) -> None:
+        """Select the output stream (stderr by default) and bar width.
+
+        Width is clamped to at least ten characters. Terminal capability is
+        detected once; construction itself emits no output.
+        """
         self.stream = stream or sys.stderr
         self.width = max(10, width)
         self.tty = bool(getattr(self.stream, "isatty", lambda: False)())
@@ -17,6 +28,11 @@ class ProgressBar:
         self._last_non_tty = -1
 
     def start(self, label: str, total: int) -> None:
+        """Reset the stage and render its initial state.
+
+        Negative totals become zero; empty stages complete immediately.
+        Starting a stage replaces the previous label and counters.
+        """
         self.label, self.total, self.current = label, max(0, total), 0
         self._last_non_tty = -1
         self._render(force=True)
@@ -24,10 +40,12 @@ class ProgressBar:
             self.finish()
 
     def advance(self, amount: int = 1) -> None:
+        """Add completed work, clamp to the total, and render when appropriate."""
         self.current = min(self.total, self.current + amount)
         self._render()
 
     def finish(self) -> None:
+        """Mark the stage complete and terminate an interactive progress line."""
         if self.current != self.total:
             self.current = self.total
             self._render(force=True)

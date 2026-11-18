@@ -51,6 +51,19 @@ def _save_atomic(path: Path, data: dict) -> None:
 
 
 def main() -> None:
+    """Generate/reuse answers for a JSONL evaluation set and save JSON checkpoints.
+
+    Parses question/output/index/model flags, validates unique string IDs, and
+    resumes compatible `answered` entries by ID. Each new question retrieves
+    evidence and calls Ollama; per-question errors are recorded without aborting
+    the batch. Atomically replaces output after each result and prints final
+    `ANSWER_FILE`/`COMPLETE` status. A normal return can still contain failed
+    answers, so inspect `complete` and each result's status.
+
+    Use a fresh output path after changing source data/questions/settings:
+    resume checks do not detect every possible experiment difference.
+    `pass_criteria` is retained for human review, not automatically graded.
+    """
     root = PROJECT_ROOT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--questions", type=resolve_path, default=root / "sample_questions" / "fak_questions.jsonl")

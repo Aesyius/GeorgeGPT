@@ -13,7 +13,12 @@ DEFAULT_EMBEDDING_BYTES = 4096
 
 
 def embedding_metadata(chunk: dict, model: str, max_bytes: int) -> dict:
-    """Common metadata for both repository and single-file vector publication."""
+    """Return structural and version metadata for a chunk's stored vector.
+
+    `chunk` must contain heading, symbol, and signature fields from `chunk_file`.
+    `model` and `max_bytes` record the embedding settings so later indexing can
+    distinguish reusable vectors from incompatible ones. The input is unchanged.
+    """
     return {"heading": chunk["heading"] or "", "heading_path": chunk["heading_path"],
             "symbol": chunk["symbol"], "signature": chunk["signature"],
             "embedding_model": model, "chunking_version": CHUNKING_VERSION,
@@ -21,7 +26,12 @@ def embedding_metadata(chunk: dict, model: str, max_bytes: int) -> dict:
 
 
 def embedding_text(text: str, metadata: dict) -> str:
-    """Enrich vectors, not stored evidence, with source-derived context."""
+    """Prefix source text with available file, section, symbol, and signature context.
+
+    Returns the embedding input string without changing the stored evidence.
+    Empty metadata fields are omitted. `chunk_file` budgets this prefix as part
+    of the UTF-8 embedding byte limit.
+    """
     fields = [("File", metadata.get("path")),
               ("Section", metadata.get("heading_path") or metadata.get("heading")),
               ("Symbol", metadata.get("symbol")),
@@ -113,8 +123,24 @@ def chunk_file(path: Path, relative: str, *, chunk_size: int = 1400, overlap: in
                progress=None) -> list[dict]:
     """Split contiguous source spans, with exact offsets and a full embedding byte cap.
 
+    Args:
+        path: Source file path; read as UTF-8/BOM only when `text` is omitted.
+        relative: Repository-relative path used in structural context.
+        chunk_size: Character cap per chunk, at least 200.
+        overlap: Nonnegative long-section overlap, smaller than `chunk_size`.
+        text: Optional already-loaded source; avoids a second file read.
+        max_embedding_bytes: Byte cap including source-context prefixes, at least 512.
+        progress: Optional object with `start`, `advance`, and `finish` methods.
+
+    Returns:
+        Chunk dictionaries with original text, character offsets, one-based line
+        ranges, and heading/symbol context. No embeddings or storage writes occur.
+
     UTF-8 bytes are a conservative size proxy for byte-based tokenizers, not an
     exact token count. This avoids downloading a second tokenizer at indexing time.
+    Python/Markdown structure guides boundaries; outer whitespace is removed
+    while offsets are adjusted. Invalid limits or oversized context raise
+    `ValueError`; file/encoding errors propagate when loading from disk.
     """
     if chunk_size < 200 or overlap < 0 or overlap >= chunk_size:
         raise ValueError("chunk size must be at least 200 and overlap must be non-negative and smaller than chunk size")

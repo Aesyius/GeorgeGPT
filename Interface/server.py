@@ -41,6 +41,14 @@ FORBIDDEN_MESSAGE_FIELDS = {"tools", "tool_choice", "functions", "function_call"
 
 @dataclass(frozen=True)
 class ServerConfig:
+    """Immutable API credentials, model settings, and index/endpoint configuration.
+
+    `api_key` is required and must never be logged or exposed through public
+    runtime settings. Allocation values and the credential-free HTTP(S) Ollama
+    URL are validated at construction. `collection_name` can name a base catalog;
+    actual model-specific index selection occurs during application startup.
+    Constructing this object does not launch services or prepare an index.
+    """
     api_key: str
     chat_model: str = field(default_factory=lambda: ModelSettings.from_env().chat_model)
     db_path: Path = DEFAULT_DB_PATH
@@ -61,6 +69,12 @@ class ServerConfig:
 
     @classmethod
     def from_env(cls):
+        """Build API configuration from environment and shared model/repository defaults.
+
+        Requires `RAG_API_KEY`; resolves model JSON/overrides, database path,
+        base collection, Ollama URL, and source repository. Missing/invalid
+        settings raise `ValueError`. The environment itself is not changed.
+        """
         models = ModelSettings.from_env()
         return cls(
             api_key=os.getenv("RAG_API_KEY", ""),
@@ -113,8 +127,21 @@ def _validate(payload):
 def create_app(config: ServerConfig | None = None, retriever=None) -> FastAPI:
     """Create the app; validate configuration and load the index at startup.
 
+    Args:
+        config: Explicit validated settings, or resolve from environment at lifespan entry.
+        retriever: Optional injected object exposing `retrieve`; bypasses index preparation.
+
+    Returns:
+        A FastAPI application with bearer-authenticated `/v1/models`,
+        `/v1/config`, and `/v1/chat/completions` routes.
+
     Explicit config/retriever injection supports offline tests and embedding.
     No CORS middleware or tool/execution routes are installed.
+    Normal lifespan startup may build a model-specific index before accepting
+    requests. Requests are bounded and queued for one generation at a time;
+    completion responses support both JSON and SSE streaming. Merely calling
+    this factory does not start an HTTP listener; use the managed launcher or
+    Uvicorn with a loopback host.
     """
     @asynccontextmanager
     async def lifespan(app):

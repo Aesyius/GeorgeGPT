@@ -28,6 +28,15 @@ class Retriever:
         context_budget: int = 18000,
         keep_alive_seconds: int | None = None,
     ) -> None:
+        """Open a matching prepared index and configure hybrid retrieval.
+
+        `collection_name` may be a base catalog or actual registered collection.
+        `embedding_model` must match the prepared vectors. `top_k` is the positive
+        passage limit; `context_budget` is a character budget of at least 1000.
+        Optional Ollama URL/retention settings configure query embeddings.
+        Construction opens Chroma but does not build an index or start a server.
+        Invalid limits or mismatched/stale catalog state raise `ValueError`.
+        """
         if top_k < 1 or context_budget < 1000:
             raise ValueError("top_k must be positive and context_budget at least 1000")
         embedding_model = resolve_embedding_model(embedding_model)
@@ -70,7 +79,22 @@ class Retriever:
         ]
 
     def retrieve(self, question: str, history: list[dict] | None = None) -> list[dict]:
-        """Return evidence ranked by reciprocal-rank fusion within the context budget."""
+        """Embed a question and merge semantic and keyword evidence by reciprocal rank.
+
+        Args:
+            question: Search text; blank questions return no evidence.
+            history: Accepted for interface compatibility; currently not used
+                to rewrite or expand the search query.
+
+        Returns:
+            Ranked dictionaries with `id`, `text`, `metadata`, and fused `score`,
+            capped by `top_k` and the character budget. Scores are ranking values,
+            not probabilities. An oversized first passage can be truncated.
+
+        Queries Ollama and the existing Chroma collection. Missing/unavailable
+        BM25 storage falls back to semantic results. Does not re-embed documents,
+        execute tools, or modify the indexed corpus.
+        """
         question = question.strip()
         if not question:
             return []

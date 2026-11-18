@@ -5,6 +5,10 @@ r"""
 
 ## Before running commands
 
+This is a lookup reference, not an installation sequence. Start with the
+[seven-step setup guide](setup.html) for a new installation, or
+[daily-use procedures](daily_use.html) for an existing one.
+
 Use PowerShell from the project root, with dependencies installed.
 Every argparse command below accepts `-h` / `--help`, which prints syntax and
 exits without executing its workflow. For example:

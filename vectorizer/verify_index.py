@@ -36,7 +36,21 @@ def verify_repository_index(repository: str | Path | None = None, *,
                             chunk_size: int = 1400, overlap: int = 180,
                             page_size: int = 256,
                             max_embedding_bytes: int = DEFAULT_EMBEDDING_BYTES) -> dict:
-    """Compare the current source's expected chunk IDs with every stored vector and FTS row."""
+    """Audit current repository chunks against persisted vectors and keyword rows.
+
+    Uses the same model, chunk size, overlap, and embedding byte cap as indexing;
+    callers must supply matching settings. `collection_name` is resolved through
+    the model catalog. `page_size` bounds vector reads and must be positive.
+
+    Returns a report with `ok`, source/stored counts, vector dimensions,
+    inconsistency counts, skipped files, and bounded diagnostic ID samples.
+    Checks metadata, finite vector values, dimension consistency, and FTS IDs.
+    Known embedding tags also have an expected vector dimension.
+
+    Reads source files and scans stored vector pages; never calls Ollama or
+    repairs the corpus. Run explicitly for maintenance, not routine startup.
+    Configuration, filesystem, storage, and decoding errors may propagate.
+    """
     embedding_model = resolve_embedding_model(embedding_model)
     root = configured_repository() if repository is None else resolve_path(repository)
     db_dir = resolve_path(db_path)
@@ -141,6 +155,12 @@ def verify_repository_index(repository: str | Path | None = None, *,
 
 
 def main() -> None:
+    """Run the audit CLI, print its report, and exit nonzero on audit failures.
+
+    Accepts repository/index/chunking overrides; `--help` lists all flags.
+    A failed report or skipped source files exits with status 1. Argument and
+    handled operational errors are reported through argparse.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=resolve_path, default=None,
                         help="repository directory (default: repository_path in config/bootup.json)")

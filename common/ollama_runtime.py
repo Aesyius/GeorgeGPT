@@ -27,7 +27,22 @@ def _ready(base_url: str) -> bool:
 
 
 def ensure_ollama_running(base_url: str, *, timeout: float = 30) -> None:
-    """Reuse a healthy server, or start a local one without restarting anything."""
+    """Reuse a healthy Ollama endpoint or launch an installed local HTTP server.
+
+    Args:
+        base_url: HTTP(S) endpoint without credentials, query, or fragment.
+        timeout: Positive readiness wait in seconds after launching a server.
+
+    Existing healthy endpoints are never restarted. Automatic launch is limited
+    to root-path loopback HTTP URLs; unavailable remote/HTTPS servers must be
+    started separately. Locates Ollama on PATH or its usual Windows installation
+    path, appends output to `ollama-vectorize.log`, and leaves the server running.
+    Does not install Ollama or download models.
+
+    Raises:
+        ValueError: The URL or timeout is invalid.
+        RuntimeError: No executable is found, readiness fails, or startup times out.
+    """
     if timeout <= 0:
         raise ValueError("Ollama startup timeout must be positive")
     url = urlsplit(base_url)

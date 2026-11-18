@@ -20,11 +20,18 @@ class LoadingBar:
     """Compact waiting indicator; bounded log output when redirected."""
 
     def __init__(self, label: str, width: int = 28):
+        """Set the display label/width and detect interactive stdout once."""
         self.label, self.width = label, width
         self.last_bucket = -1
         self.interactive = sys.stdout.isatty()
 
     def update(self, percent: int, *, complete: bool = False) -> None:
+        """Render a clamped percentage, throttling redirected output to 10% buckets.
+
+        `complete=True` forces output and ends an interactive line. Percentages
+        supplied by `wait_until` describe elapsed timeout budget, not measured
+        service-completion work.
+        """
         percent = max(0, min(100, int(percent)))
         bucket = percent // 10
         if not self.interactive and bucket == self.last_bucket and not complete:
@@ -40,6 +47,14 @@ class LoadingBar:
 
 
 def wait_until(description: str, check, timeout: int, interval: int):
+    """Poll a readiness callback until it returns a truthy value or time expires.
+
+    `timeout` and `interval` are seconds; callers supply positive settings.
+    Returns the callback's truthy result. Failed checks/exceptions are retried,
+    and the last error is included in the final `BootError` on timeout.
+    Prints bounded readiness progress; does not start or stop services itself.
+    A blocking callback can extend the overall wall-clock wait.
+    """
     started = time.monotonic()
     deadline = started + timeout
     last_error = None
@@ -61,6 +76,13 @@ def wait_until(description: str, check, timeout: int, interval: int):
 
 
 def request_json(url: str, *, headers: dict | None = None, timeout: int = 5, payload: dict | None = None):
+    """Make a bounded HTTP GET, or a JSON POST when `payload` is supplied.
+
+    Copies optional headers, UTF-8 encodes JSON bodies, and returns
+    `(status_code, decoded_body)`. Non-JSON content types produce a `None` body.
+    HTTP/network and JSON decoding errors propagate to the readiness/bootstrap
+    caller. Does not retry, log credentials, or change server configuration.
+    """
     request_headers = dict(headers or {})
     data = None
     if payload is not None:
@@ -74,7 +96,14 @@ def request_json(url: str, *, headers: dict | None = None, timeout: int = 5, pay
 
 
 def read_api_key(config: dict, root: Path) -> str:
-    """Read the saved connection key and compare overrides without logging secrets."""
+    """Return the saved WebUI API key for the configured GeorgeGPT connection.
+
+    Opens the configured SQLite database read-only and looks up the exact
+    OpenAI base URL. A missing database/connection/key raises
+    `ConnectionNotConfigured`. Disabled connections, database failures, or a
+    disagreeing environment key raise `BootError`. Never generates, overwrites,
+    logs, or repairs credentials; first-time setup handles creation separately.
+    """
     env_name = config.get("api_key_env_var", "RAG_API_KEY")
     env_key = os.getenv(env_name, "").strip()
     db_path = expand_path(config["rag_api"]["open_webui_database"], root)

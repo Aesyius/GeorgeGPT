@@ -35,6 +35,10 @@ def collection_embedding_model(collection) -> str | None:
 
 
 def batches(items: list, size: int):
+    """Yield ordered list slices of at most `size` elements without mutating input.
+
+    Empty input yields no batches. A nonpositive size raises `ValueError`.
+    """
     if size < 1:
         raise ValueError("batch size must be positive")
     for start in range(0, len(items), size):
@@ -42,7 +46,13 @@ def batches(items: list, size: int):
 
 
 def collection_snapshot(collection, page_size: int = 256, include: list[str] | None = None, *, where: dict | None = None):
-    """Yield bounded pages, optionally restricted to one repository at the DB."""
+    """Yield Chroma result pages using offset/limit pagination.
+
+    `include` defaults to documents and metadata; `where` is passed to Chroma
+    for database-side filtering. Each yielded value is a Chroma result mapping,
+    including a possibly empty terminal page. Requires a positive `page_size`.
+    This is a paginated traversal, not a transactionally frozen snapshot.
+    """
     if page_size < 1:
         raise ValueError("page size must be positive")
     offset = 0
@@ -59,6 +69,11 @@ def collection_snapshot(collection, page_size: int = 256, include: list[str] | N
 
 
 def repository_ids(collection, repository_id: str, page_size: int = 256) -> tuple[set[str], dict[str, dict]]:
+    """Return a source's stored ID set and metadata-by-ID mapping.
+
+    Filters by `repository_id` in Chroma and checks ownership again while
+    consuming bounded pages. Does not fetch vectors/documents or modify storage.
+    """
     metadata = {}
     for page in collection_snapshot(collection, page_size, include=["metadatas"], where={"repository_id": repository_id}):
         for ident, item in zip(page.get("ids", []), page.get("metadatas", [])):
@@ -68,6 +83,11 @@ def repository_ids(collection, repository_id: str, page_size: int = 256) -> tupl
 
 
 def collection_documents(collection):
+    """Stream `{id, text, metadata}` records from every collection page.
+
+    Used to rebuild keyword storage without constructing a second corpus list.
+    Stored embeddings are not fetched.
+    """
     for page in collection_snapshot(collection):
         for ident, text, metadata in zip(page["ids"], page["documents"], page["metadatas"]):
             yield {"id": ident, "text": text, "metadata": metadata}
@@ -75,18 +95,32 @@ def collection_documents(collection):
 
 @dataclass(frozen=True)
 class SyncResult:
+    """Immutable counts of newly embedded, reused, and removed source chunks."""
+
     embedded_chunks: int
     reused_chunks: int
     removed_chunks: int
 
     def to_dict(self) -> dict:
+        """Return the three synchronization counts under their public field names."""
         return {"embedded_chunks": self.embedded_chunks, "reused_chunks": self.reused_chunks,
                 "removed_chunks": self.removed_chunks}
 
 
 def synchronize_vectors(collection, documents: list[dict], old_ids: set[str], old_metadata: dict,
                         embedder, embedding_model: str, batch_size: int, progress) -> SyncResult:
-    """Refresh, publish, then remove stale vectors; never remove first on failure."""
+    """Refresh reusable metadata, embed missing chunks, then delete stale vectors.
+
+    `documents` contains prepared `{id, text, metadata}` records; `old_ids` and
+    `old_metadata` must describe the same source. Reuse requires matching model
+    and chunking/input versions. New embedding requests use the positive
+    `batch_size`; metadata updates and deletions use `WRITE_BATCH_SIZE`.
+
+    Returns a `SyncResult` and reports each phase through `progress`.
+    A failed embedding/write leaves earlier batches intact and prevents reaching
+    stale deletion. Does not update BM25, readiness manifests, or catalog entries;
+    those are the indexing orchestrator's responsibility.
+    """
     if batch_size < 1:
         raise ValueError("embedding batch size must be positive")
     by_id = {document["id"]: document for document in documents}

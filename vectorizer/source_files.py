@@ -26,7 +26,14 @@ MAX_SOURCE_BYTES = 2_000_000
 
 
 def is_indexable(path: Path, root: Path) -> bool:
-    """Allow source/text formats, never actual environment or credential files."""
+    """Check filename/type policy for a path under a repository root.
+
+    Rejects known generated directories, actual environment files, common
+    credential names/extensions, and unsupported formats. Example environment
+    templates are permitted. This helper does not read contents, check size, or
+    rule out every possible secret; `discover_files` adds filesystem safeguards.
+    A path outside `root` raises `ValueError`.
+    """
     relative = path.relative_to(root)
     if any(part.lower() in IGNORED_DIRS for part in relative.parts):
         return False
@@ -43,7 +50,13 @@ def is_indexable(path: Path, root: Path) -> bool:
 
 
 def discover_files(root: str | Path) -> list[Path]:
-    """Return deterministic, safe-to-index paths without following symlinks."""
+    """Return eligible source paths in deterministic directory/filename order.
+
+    Resolves `root`, prunes ignored directories and symlinks, applies
+    `is_indexable`, and skips files over `MAX_SOURCE_BYTES` or inaccessible
+    stat results. Does not open file contents or use Git ignore rules.
+    A nonexistent/non-directory root raises `ValueError`.
+    """
     root = resolve_path(root)
     if not root.is_dir():
         raise ValueError(f"repository is not a directory: {root}")

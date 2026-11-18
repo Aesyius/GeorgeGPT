@@ -4,6 +4,7 @@
     ("user_guide", "index.html", "Home"),
     ("user_guide.setup", "user_guide/setup.html", "First-time setup"),
     ("user_guide.daily_use", "user_guide/daily_use.html", "Daily use and bootup"),
+    ("user_guide.tech_stack", "user_guide/tech_stack.html", "Technology stack"),
     ("user_guide.cli", "user_guide/cli.html", "CLI commands and flags"),
     ("user_guide.configuration", "user_guide/configuration.html", "Configuration"),
     ("user_guide.troubleshooting", "user_guide/troubleshooting.html", "Troubleshooting"),
@@ -14,6 +15,7 @@
 {% endblock %}
 
 {% block nav_title %}
+<a class="skip-content" href="#page-top">Skip to page content</a>
 <div class="site-navigation" role="navigation" aria-label="Documentation">
     <a class="site-brand" href="{{ site_root }}index.html">GeorgeGPT documentation</a>
     <h2>User guide</h2>
@@ -41,8 +43,16 @@
 
 {% block module_info %}
 <a id="page-top"></a>
-{{ super() }}
 {% if module.modulename.startswith("user_guide") %}
+<section class="module-info guide-content">
+    <p class="doc-breadcrumb">
+        <a href="{{ site_root }}index.html">GeorgeGPT documentation</a>
+        {% for name, path, label in guides if name == module.modulename %}
+        <span aria-hidden="true"> / </span>{{ label }}
+        {% endfor %}
+    </p>
+    {{ docstring(module) }}
+</section>
 <div class="guide-pagination" role="navigation" aria-label="Guide page sequence">
     {% for name, path, label in guides if name == module.modulename %}
         {% set position = guides.index((name, path, label)) %}
@@ -54,6 +64,8 @@
         {% endif %}
     {% endfor %}
 </div>
+{% else %}
+{{ super() }}
 {% endif %}
 {% endblock %}
 

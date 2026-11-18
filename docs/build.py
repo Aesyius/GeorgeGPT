@@ -7,6 +7,12 @@ import sys
 
 
 def main() -> None:
+    """Render the guide and public Python APIs as portable, server-free HTML.
+
+    Writes under project-root `docs/html`, normalizes machine-specific checkout
+    paths in defaults, and makes the user guide the landing page. Requires pdoc
+    plus runtime import dependencies; does not launch application services.
+    """
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
     sys.path.insert(0, str(root / "docs"))
@@ -21,6 +27,7 @@ def main() -> None:
     output = root / "docs" / "html"
     pdoc.render.configure(
         template_directory=root / "docs" / "templates",
+        docformat="google",
         search=False, show_source=False,
         footer_text="GeorgeGPT — local repository assistant",
     )
