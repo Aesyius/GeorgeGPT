@@ -93,7 +93,7 @@ def index_repository(
         Repository/revision, file/chunk counts, embedded/reused/removed counts,
         selected collection, and keyword-index path.
 
-    Discovers eligible files, skips unreadable/undecodable text, reuses compatible
+    Rejects unreadable/undecodable eligible files before writing, reuses compatible
     vectors, embeds changed chunks, removes stale source chunks, and replaces
     this repository's keyword rows. Readiness metadata is published after both
     stores succeed. This is not a cross-store transaction: failed runs may retain
@@ -123,22 +123,26 @@ def index_repository(
     progress.start("Scanning/chunking files", len(files))
     with closing(iter_prepared_files(files, root, workers=chunk_workers, chunk_size=chunk_size,
                                      overlap=overlap, max_embedding_bytes=max_embedding_bytes)) as results:
-        for result in results:
-            if result is not None:
-                relative, content_hash, chunks = result
-                source_hashes.append((relative, content_hash))
-                for idx, chunk in enumerate(chunks):
-                    metadata = {
-                        "repository": str(root), "repository_id": repo_key, "revision": revision,
-                        "path": relative, "start_line": chunk["start_line"], "end_line": chunk["end_line"],
-                        "source": f"{root / relative}:{chunk['start_line']}-{chunk['end_line']}",
-                        **embedding_metadata(chunk, embedding_model, max_embedding_bytes),
-                    }
-                    doc_id = repository_chunk_id(repo_key, embedding_model, relative, chunk_size, overlap,
-                                                 content_hash, idx, max_embedding_bytes)
-                    prepared.append({"id": doc_id, "text": chunk["text"], "metadata": metadata})
+        for file, result in zip(files, results, strict=True):
+            if result is None:
+                raise ValueError(f"Cannot read eligible source file as UTF-8: {file.relative_to(root)}. "
+                                 "Check file access and encoding; the existing index was not modified.")
+            relative, content_hash, chunks = result
+            source_hashes.append((relative, content_hash))
+            for idx, chunk in enumerate(chunks):
+                metadata = {
+                    "repository": str(root), "repository_id": repo_key, "revision": revision,
+                    "path": relative, "start_line": chunk["start_line"], "end_line": chunk["end_line"],
+                    "source": f"{root / relative}:{chunk['start_line']}-{chunk['end_line']}",
+                    **embedding_metadata(chunk, embedding_model, max_embedding_bytes),
+                }
+                doc_id = repository_chunk_id(repo_key, embedding_model, relative, chunk_size, overlap,
+                                             content_hash, idx, max_embedding_bytes)
+                prepared.append({"id": doc_id, "text": chunk["text"], "metadata": metadata})
             progress.advance()
     progress.finish()
+    if not prepared:
+        raise ValueError(f"No nonempty source chunks found under {root}; the existing index was not modified.")
 
     keyword_path = _bm25_path(db_dir, collection_name)
     with closing(chromadb.PersistentClient(path=str(db_dir))) as client:

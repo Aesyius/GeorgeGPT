@@ -20,7 +20,7 @@ import sys
 
 from common.model_config import ModelSettings
 from .model_warmup import warm_models
-from common.paths import PROJECT_ROOT
+from common.paths import PROJECT_ROOT, default_bootup_config
 from .service_config import BootError, StartupSettings, expand_path, service_url
 # Established helper imports remain available from this CLI module.
 from .service_runtime import LoadingBar, read_api_key, request_json, wait_until
@@ -451,8 +451,8 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--service", choices=("all", "ollama", "webui", "api"),
                         help="service to kill (default: all, meaning Open WebUI, the RAG API, and Ollama)")
     parser.add_argument("--dry-run", action="store_true", help="preview verified kill targets without stopping them (kill/stop only)")
-    parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "config" / "bootup.json",
-                        help="JSON configuration file (default: config/bootup.json in the project)")
+    parser.add_argument("--config", type=Path, default=default_bootup_config(),
+                        help="JSON configuration file (default: config/bootup.local.json if present, otherwise config/bootup.json)")
     return parser
 
 

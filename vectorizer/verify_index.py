@@ -163,7 +163,7 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=resolve_path, default=None,
-                        help="repository directory (default: repository_path in config/bootup.json)")
+                        help="repository directory (default: configured repository_path)")
     parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))))
     parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))
     parser.add_argument("--embedding-model", default=None, help="override the configured embedding model")

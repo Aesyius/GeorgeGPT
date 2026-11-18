@@ -8,6 +8,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = PROJECT_ROOT / "chroma_db"
 DEFAULT_BOOTUP_CONFIG = PROJECT_ROOT / "config" / "bootup.json"
+LOCAL_BOOTUP_CONFIG = DEFAULT_BOOTUP_CONFIG.with_name("bootup.local.json")
+
+
+def default_bootup_config() -> Path:
+    """Prefer the machine-local configuration over the tracked defaults."""
+    return LOCAL_BOOTUP_CONFIG if LOCAL_BOOTUP_CONFIG.is_file() else DEFAULT_BOOTUP_CONFIG
 
 
 def resolve_path(value: str | Path) -> Path:
@@ -45,7 +51,7 @@ def configured_repository(config: dict | None = None, root: Path = PROJECT_ROOT)
         return resolve_path(os.environ["RAG_REPOSITORY_PATH"])
     if config is not None:
         return repository_path_from_config(config, root)
-    config_path = resolve_path(os.getenv("RAG_BOOTUP_CONFIG", str(DEFAULT_BOOTUP_CONFIG)))
+    config_path = resolve_path(os.getenv("RAG_BOOTUP_CONFIG") or default_bootup_config())
     try:
         config = json.loads(config_path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as error:

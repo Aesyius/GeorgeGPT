@@ -38,7 +38,8 @@ def index_file(source: Path, db_path: Path, collection_name: str, embedding_mode
     batches of 32, removes stale source vectors, and rebuilds collection BM25
     rows. Does not register a repository catalog or start Ollama itself.
 
-    Empty input or a collection owned by another embedder raises `ValueError`.
+    Empty input, a repository collection, or a collection owned by another
+    embedder raises `ValueError`.
     `embedding_timeout_seconds` bounds an Ollama HTTP wait.
     Use a separate collection when changing single-file embedding models.
     Partial completed writes can remain if later work fails.
@@ -65,6 +66,10 @@ def index_file(source: Path, db_path: Path, collection_name: str, embedding_mode
         prepared.append({"id": ident, "text": chunk["text"], "metadata": metadata})
     with closing(chromadb.PersistentClient(path=str(db_path))) as client:
         collection = client.get_or_create_collection(name=collection_name, metadata={"hnsw:space": "cosine"})
+        metadata = collection.metadata or {}
+        if any(key in metadata for key in ("index_sources", "catalog_sources", "model_indexes", "managed_identity")):
+            raise ValueError(f"Collection {collection_name!r} is a repository index or catalog. "
+                             "Use a separate --collection for single-file indexing.")
         previous_model = collection_embedding_model(collection)
         if previous_model is not None and previous_model != embedding_model:
             raise ValueError(f"Collection {collection_name!r} uses {previous_model}, not {embedding_model}. "
@@ -97,7 +102,7 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=resolve_path, default=None,
-                        help="repository directory or UTF-8 file (default: repository_path in config/bootup.json)")
+                         help="repository directory or UTF-8 file (default: configured repository_path)")
     parser.add_argument("--db-path", type=resolve_path, default=resolve_path(os.getenv("RAG_DB_PATH", str(DEFAULT_DB_PATH))),
                         help="Chroma directory (default: chroma_db beside this script)")
     parser.add_argument("--collection", default=os.getenv("RAG_COLLECTION", "repo_documents"))

@@ -64,7 +64,12 @@ try {
         }
         Write-Host ''
     }
-    if ([string]::IsNullOrWhiteSpace($ConfigPath)) { $ConfigPath = Join-Path $PSScriptRoot 'config\bootup.json' }
+    $templateConfig = Join-Path $PSScriptRoot 'config\bootup.json'
+    $localConfig = Join-Path $PSScriptRoot 'config\bootup.local.json'
+    if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+        $ConfigPath = $templateConfig
+        if (Test-Path -LiteralPath $localConfig -PathType Leaf) { $ConfigPath = $localConfig }
+    }
     $repository = (Resolve-Path -LiteralPath $RepositoryPath).Path
     if (-not (Test-Path -LiteralPath $repository -PathType Container)) { throw 'RepositoryPath must be a directory.' }
     $configFile = (Resolve-Path -LiteralPath $ConfigPath).Path
@@ -177,6 +182,8 @@ try {
     if (-not $PSCmdlet.ShouldProcess($repository, 'Initialize GeorgeGPT and bootstrap its local services')) { return }
 
     # Persist the chosen source so future bootups use the same repository.
+    # Never save the machine-specific path to the tracked template.
+    if ($configFile -eq $templateConfig) { $configFile = $localConfig }
     $config | Add-Member -MemberType NoteProperty -Name repository_path -Value $repository -Force
     [IO.File]::WriteAllText($configFile, ($config | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
 

@@ -15,10 +15,12 @@ from httpx import ReadTimeout
 
 from vectorizer.chunk_workers import iter_prepared_files, validate_chunk_workers
 from vectorizer.embeddings import create_embeddings, embed_documents_with_retry
+from vectorizer.index_catalog import matching_index
 from vectorizer.repository_index import index_repository
 from vectorizer.retrieval import Retriever
 from vectorizer.source_files import discover_files
 from vectorizer.vector_store import synchronize_vectors
+from vectorizer.vectorize import index_file
 from vectorizer.verify_index import verify_repository_index
 
 
@@ -117,6 +119,7 @@ class ChunkWorkersTest(unittest.TestCase):
             pool.assert_not_called()
 
     def test_worker_error_stops_before_storage(self):
+        (self.root / "d.txt").unlink()
         (self.root / "e.md").write_text("# " + "x" * 600, encoding="utf-8")
         with patch("vectorizer.repository_index.chromadb.PersistentClient") as client:
             with self.assertRaisesRegex(ValueError, "While chunking e.md:"):
@@ -134,6 +137,7 @@ class ChunkWorkersTest(unittest.TestCase):
 
     def test_index_reuses_vectors_when_worker_count_changes(self):
         self.db_path = self.db_path.with_name("db # literal %20 café")
+        (self.root / "d.txt").unlink()
         embedder = Mock()
         embedder.embed_documents.side_effect = lambda texts: [[1.0, 0.0] for _ in texts]
         parent_pid = os.getpid()
@@ -157,11 +161,9 @@ class ChunkWorkersTest(unittest.TestCase):
             self.assertEqual(parallel["removed_chunks"], 0)
             self.assertEqual(self.snapshot(), before)
             embedder.embed_documents.assert_not_called()
-            self.assertEqual(progress.start.call_args_list[0].args, ("Scanning/chunking files", 4))
-            self.assertEqual(progress.advance.call_args_list[:4], [call()] * 4)
+            self.assertEqual(progress.start.call_args_list[0].args, ("Scanning/chunking files", 3))
+            self.assertEqual(progress.advance.call_args_list[:3], [call()] * 3)
 
-        # The audit treats skipped inputs as failures; this file contributed no chunks.
-        (self.root / "d.txt").unlink()
         report = verify_repository_index(self.root, db_path=self.db_path, embedding_model="test-model")
         self.assertTrue(report["ok"], report)
         with patch("vectorizer.retrieval.create_embeddings", return_value=embedder):
@@ -169,6 +171,48 @@ class ChunkWorkersTest(unittest.TestCase):
             with closing(retriever._client):
                 hits = retriever._keyword_search("Example", 5)
                 self.assertEqual([hit["metadata"]["path"] for hit in hits], ["a.py"])
+
+    def test_unreadable_reindex_preserves_previous_index(self):
+        (self.root / "d.txt").unlink()
+        embedder = Mock()
+        embedder.embed_documents.side_effect = lambda texts: [[1.0, 0.0] for _ in texts]
+        options = dict(db_path=self.db_path, embedding_model="test-model", progress=Mock())
+        with patch("vectorizer.repository_index.create_embeddings", return_value=embedder):
+            index_repository(self.root, **options)
+            before = self.snapshot()
+            keyword = self.db_path / "repo_documents.bm25.sqlite3"
+            before_keyword = keyword.read_bytes()
+            (self.root / "a.py").write_bytes(b"\xff")
+            embedder.reset_mock()
+            with self.assertRaisesRegex(ValueError, r"UTF-8: a\.py"):
+                index_repository(self.root, chunk_workers=2, **options)
+            embedder.embed_documents.assert_not_called()
+            self.assertEqual(self.snapshot(), before)
+            self.assertEqual(keyword.read_bytes(), before_keyword)
+
+    def test_empty_repository_does_not_publish(self):
+        (self.root / "d.txt").unlink()
+        for file in self.root.iterdir():
+            file.write_text(" \n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "No nonempty source chunks"):
+            index_repository(self.root, db_path=self.db_path, progress=Mock())
+        self.assertFalse(self.db_path.exists())
+
+    def test_single_file_rejects_repository_collection_but_allows_separate_collection(self):
+        (self.root / "d.txt").unlink()
+        embedder = Mock()
+        embedder.embed_documents.side_effect = lambda texts: [[1.0, 0.0] for _ in texts]
+        with patch("vectorizer.repository_index.create_embeddings", return_value=embedder):
+            index_repository(self.root, db_path=self.db_path, embedding_model="test-model", progress=Mock())
+        before = self.snapshot()
+        args = ("test-model", "http://localhost:11434", 1400, 180)
+        with patch("vectorizer.vectorize.create_embeddings", return_value=embedder) as factory:
+            with self.assertRaisesRegex(ValueError, "Use a separate --collection"):
+                index_file(self.root / "a.py", self.db_path, "repo_documents", *args)
+            factory.assert_not_called()
+            self.assertGreater(index_file(self.root / "a.py", self.db_path, "single_files", *args), 0)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(matching_index(self.db_path, "repo_documents", "test-model"), "repo_documents")
 
     def snapshot(self):
         with closing(chromadb.PersistentClient(path=str(self.db_path))) as client:

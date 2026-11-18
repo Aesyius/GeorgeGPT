@@ -76,7 +76,8 @@ Open PowerShell in this project folder. If this stack is already running, stop i
 | File | Settings |
 | --- | --- |
 | `config/models.json` | Chat model, embedding model, context window, and model retention |
-| `config/bootup.json` | Repository path, executable paths, service ports, and log directory |
+| `config/bootup.json` | Shared defaults for repository path, executables, ports, and logs |
+| `config/bootup.local.json` | Optional Git-ignored copy for machine-specific settings; takes precedence by default |
 
 Choose models that fit your hardware. Setup downloads missing models using the exact tags in `config/models.json`.
 
@@ -95,7 +96,7 @@ The 4B embedder provides richer retrieval representations than the smaller 0.6B 
 
 Full GPU residency is a target, not a guarantee: quantization, Ollama version, context allocation, and other GPU applications affect memory use. Check `ollama ps` after a query for **`100% GPU` on both model rows**, and use `nvidia-smi` to inspect total VRAM consumption. If either model spills onto the CPU, reduce the context window or free GPU memory.
 
-The `repository_path` setting accepts an absolute path or a path relative to this project root. The setup command below saves your selected repository there automatically.
+The `repository_path` setting accepts an absolute path or a path relative to this project root. By default, setup saves your selection in `config/bootup.local.json`. If you already customized `config/bootup.json`, copy it to `config/bootup.local.json` before sharing your changes.
 
 ### 3. Run setup
 
@@ -115,7 +116,7 @@ handling. The repository path is saved for the current machine; the shipped
 `../FAK` value is only a portable default, not a required folder name.
 
 If Ollama is installed somewhere other than `%LOCALAPPDATA%\Programs\Ollama`,
-update `ollama.executable` in `config/bootup.json`. If another program uses one of
+update `ollama.executable` in your local bootup config. If another program uses one of
 the local ports, choose a different port and update `rag_api.openai_base_url` to
 match when changing the API port. Keep all hosts on loopback.
 
@@ -165,7 +166,7 @@ These URLs use the default ports. Existing saved connection keys are reused. If 
 <details>
 <summary>Manual installation alternative</summary>
 
-First set `repository_path` in `config/bootup.json` and choose models in `config/models.json`. With Ollama running:
+First copy `config/bootup.json` to `config/bootup.local.json`, set `repository_path` in the copy, and choose models in `config/models.json`. With Ollama running:
 
 ```powershell
 py -3.12 -m venv .venv
@@ -236,7 +237,9 @@ Both commands use the configured repository and embedding model. Reindexing reus
 
 The vectorize CLI starts a stopped local HTTP Ollama server automatically. Ollama must be installed and the embedding model already pulled; remote servers must be started separately. An automatically started server remains running afterward.
 
-To change repositories, update `repository_path` in `config/bootup.json`, run the two commands above, and restart the stack. A positional path can override the repository for an individual command.
+If a source file cannot be read as UTF-8, indexing stops before changing the index. Check the file's encoding or permissions, then retry.
+
+To change repositories, update `repository_path` in `config/bootup.local.json`, run the two commands above, and restart the stack. A positional path can override the repository for an individual command. Use a new collection if you intend to keep the two repositories' indexes separate.
 
 ### Change models
 
@@ -292,6 +295,6 @@ SQLite file. Existing databases, connection keys, and signing keys are not reset
 
 Explicit CLI flags such as `--embedding-model`, `--db-path`, and `--collection` override command defaults. Keep the database and base collection consistent between indexing, querying, verification, and startup. Use `--help` on individual commands for additional options.
 
-For single-file indexing, explicitly choose a separate collection when changing embedding models.
+For single-file indexing, use a collection separate from your repository index, even when using the same embedding model.
 
 </details>

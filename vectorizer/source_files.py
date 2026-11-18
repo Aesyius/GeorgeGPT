@@ -53,23 +53,24 @@ def discover_files(root: str | Path) -> list[Path]:
     """Return eligible source paths in deterministic directory/filename order.
 
     Resolves `root`, prunes ignored directories and symlinks, applies
-    `is_indexable`, and skips files over `MAX_SOURCE_BYTES` or inaccessible
-    stat results. Does not open file contents or use Git ignore rules.
+    `is_indexable`, and skips files over `MAX_SOURCE_BYTES`. Traversal or stat
+    errors propagate to prevent an incomplete scan from deleting indexed chunks.
+    Does not open file contents or use Git ignore rules.
     A nonexistent/non-directory root raises `ValueError`.
     """
     root = resolve_path(root)
     if not root.is_dir():
         raise ValueError(f"repository is not a directory: {root}")
+
+    def raise_walk_error(error: OSError) -> None:
+        raise error
+
     found = []
-    for directory, dirs, files in os.walk(root):
+    for directory, dirs, files in os.walk(root, onerror=raise_walk_error):
         current = Path(directory)
         dirs[:] = sorted(name for name in dirs if name.lower() not in IGNORED_DIRS and not (current / name).is_symlink())
         for filename in sorted(files):
             path = current / filename
-            try:
-                small_enough = path.stat().st_size <= MAX_SOURCE_BYTES
-            except OSError:
-                continue
-            if small_enough and not path.is_symlink() and is_indexable(path, root):
+            if is_indexable(path, root) and not path.is_symlink() and path.stat().st_size <= MAX_SOURCE_BYTES:
                 found.append(path)
     return found

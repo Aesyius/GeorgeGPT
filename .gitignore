@@ -11,6 +11,7 @@ __pycache__/
 chroma_db/
 chromadb/
 runtime_logs/
+/config/bootup.local.json
 sample_questions/fak_answers.json
 .env
 .env.*

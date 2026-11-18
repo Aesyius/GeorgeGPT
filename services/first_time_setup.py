@@ -12,7 +12,7 @@ import subprocess
 import sys
 import webbrowser
 
-from common.paths import PROJECT_ROOT
+from common.paths import PROJECT_ROOT, default_bootup_config
 from .bootup import start_rag_api, start_webui
 from .model_warmup import warm_models
 from .service_config import BootError, StartupSettings, service_url
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     launched services remain running. Does not install packages or pull models.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "config" / "bootup.json")
+    parser.add_argument("--config", type=Path, default=default_bootup_config())
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args(argv)
     try:
